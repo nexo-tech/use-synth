@@ -233,6 +233,7 @@ class SynthEngine {
   public config: UseSynthConfig;
   readonly state: SynthState;
   private nodes = new Map<string, AudioNode>();
+  private allNodes = new Map<string, AudioNode>();
   private modMatrix: ModulationEntry[] = [];
 
   constructor(config: UseSynthConfig, ctx?: AudioContext) {
@@ -408,8 +409,21 @@ class SynthEngine {
       if (rest.length) section[rest.join(".")] = value;
       else Object.assign(section, value);
       this.state.paramCache.set(path, value);
-      this.buildComponents();
-      this.buildRouting();
+
+      switch (compType) {
+        case "oscillator":
+          const [paramName] = rest;
+          console.log("getting osc", compId, paramName, this.nodes);
+          const osc = this.nodes.get(compId) as OscillatorNode;
+          if (paramName === "detune") {
+            osc.detune.setValueAtTime(value, this.context.currentTime);
+          }
+          break;
+
+        default:
+          this.buildComponents();
+          this.buildRouting();
+      }
     }
   }
 
