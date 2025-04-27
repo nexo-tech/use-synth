@@ -397,25 +397,27 @@ class OscillatorEngineNode implements AudioEngineNode {
             return;
         }
 
+        const now = this.engine.context.currentTime;
+        const releaseTime = this.envelope?.config.release ?? 0;
+
         if (this.envelope) {
             console.log(`[Osc ${this.id}] Applying envelope release`);
             this.envelope.handleStopNode(instance.adsrGain);
         }
 
-        const releaseTime = this.envelope?.config.release ?? 0;
-        if (releaseTime === 0) {
-            console.log(`[Osc ${this.id}] Immediate release`);
-            instance.stop();
-            instance.disconnect();
-            this.instances.delete(note);
-        } else {
-            console.log(`[Osc ${this.id}] Scheduling release after ${releaseTime}s`);
-            setTimeout(() => {
+        // Schedule the cleanup after the release time
+        const cleanupTime = now + releaseTime + 0.01; // Add small buffer for safety
+        instance.adsrGain.gain.setValueAtTime(instance.adsrGain.gain.value, now);
+        instance.adsrGain.gain.linearRampToValueAtTime(0, cleanupTime);
+
+        // Schedule the cleanup
+        setTimeout(() => {
+            if (this.instances.has(note)) { // Double check the note is still there
                 instance.stop();
                 instance.disconnect();
                 this.instances.delete(note);
-            }, releaseTime * 1000);
-        }
+            }
+        }, (releaseTime + 0.01) * 1000); // Convert to milliseconds
     }
 
     updateConfig(newConfig: OscillatorConfig) {
@@ -460,6 +462,8 @@ export interface EffectConfig {
 }
 
 export interface UseSynthConfig {
+    polyphony: number; // Maximum number of simultaneous notes
+    maxVoices: number; // Maximum number of voices per oscillator
     components: {
         oscillators: Record<string, OscillatorConfig>;
         filters: Record<string, FilterConfig>;
@@ -476,12 +480,18 @@ class Engine2 {
     private masterGain: MasterGain;
     private isResuming: boolean = false;
     private currentConfig: UseSynthConfig;
+    private activeNotes: Set<number> = new Set();
+    private voiceAllocation: Map<number, string> = new Map(); // Maps note to oscillator ID
 
     constructor() {
         this._context = new AudioContext();
         this.masterGain = new MasterGain(this, 'output');
         this.components.set('output', this.masterGain);
-        this.currentConfig = baseConfig;
+        this.currentConfig = {
+            ...baseConfig,
+            polyphony: 8,
+            maxVoices: 5
+        };
     }
 
     get context() {
@@ -562,10 +572,22 @@ class Engine2 {
             return;
         }
 
+        // Check polyphony limit
+        if (this.activeNotes.size >= this.currentConfig.polyphony) {
+            console.warn('[Engine] Polyphony limit reached, note ignored');
+            return;
+        }
+
         console.log('[Engine] Playing note:', { note, velocity });
         this.components.forEach((component) => {
             if (component.type === 'oscillator') {
-                (component as OscillatorEngineNode).handleStartNode(note, velocity);
+                const osc = component as OscillatorEngineNode;
+                // Check if this oscillator has reached its voice limit
+                if (osc.instances.size < this.currentConfig.maxVoices) {
+                    osc.handleStartNode(note, velocity);
+                    this.activeNotes.add(note);
+                    this.voiceAllocation.set(note, osc.id);
+                }
             }
         });
     }
@@ -578,11 +600,15 @@ class Engine2 {
         }
 
         console.log('[Engine] Stopping note:', note);
-        this.components.forEach((component) => {
-            if (component.type === 'oscillator') {
-                (component as OscillatorEngineNode).handleStopNode(note);
+        const oscId = this.voiceAllocation.get(note);
+        if (oscId) {
+            const osc = this.components.get(oscId) as OscillatorEngineNode;
+            if (osc) {
+                osc.handleStopNode(note);
+                this.activeNotes.delete(note);
+                this.voiceAllocation.delete(note);
             }
-        });
+        }
     }
 
     createFromConfig(config: UseSynthConfig) {
@@ -642,6 +668,8 @@ class Engine2 {
 }
 
 const baseConfig: UseSynthConfig = {
+    polyphony: 8,
+    maxVoices: 5,
     components: {
         oscillators: {
             main: {
