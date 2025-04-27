@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect } from "react";
-import { useSynth } from "use-synth";
+import { useSynth, UseSynthConfig } from "use-synth";
 
 /*
  * A minimal demo component that wires the `useSynth` hook to a simple
@@ -71,6 +71,9 @@ const PRESET: UseSynthConfig = {
 
 export const SynthPad: React.FC = () => {
   const synth = useSynth(PRESET);
+
+  //@ts-ignore
+  window.getState = synth.getState;
 
   /* ------------------------------------------------------
    * Computer keyboard handling

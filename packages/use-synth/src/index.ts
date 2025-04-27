@@ -104,7 +104,11 @@ export interface KeyMapping {
 
 export interface InputConfig {
   midi?: { channel?: number; throttle?: number };
-  keyboard?: { mapping: Record<string, KeyMapping>; octave?: number; velocity?: number | "dynamic" };
+  keyboard?: {
+    mapping: Record<string, KeyMapping>;
+    octave?: number;
+    velocity?: number | "dynamic";
+  };
   mouse?: { quantize?: boolean; glide?: number };
 }
 
@@ -171,15 +175,41 @@ export interface UseSynthReturn {
  * 2. Utility Helpers
  * -------------------------------------------------------------------------*/
 
-const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const NOTE_NAMES = [
+  "C",
+  "C#",
+  "D",
+  "D#",
+  "E",
+  "F",
+  "F#",
+  "G",
+  "G#",
+  "A",
+  "A#",
+  "B",
+];
 
 function noteToMidi(note: number | string): number {
   if (typeof note === "number") return Math.max(0, Math.min(127, note));
   const match = /^([A-G])(#|b)?(\d)$/.exec(note.toUpperCase());
   if (!match) throw new Error(`Invalid note string: ${note}`);
   let [_, n, accidental, octave] = match;
-  let index = NOTE_NAMES.indexOf(accidental === "b" ?
-    ({ C: "B", D: "C#", E: "D#", F: "E", G: "F#", A: "G#", B: "A#" } as Record<string, string>)[n] : `${n}${accidental ?? ""}`);
+  let index = NOTE_NAMES.indexOf(
+    accidental === "b"
+      ? (
+          {
+            C: "B",
+            D: "C#",
+            E: "D#",
+            F: "E",
+            G: "F#",
+            A: "G#",
+            B: "A#",
+          } as Record<string, string>
+        )[n]
+      : `${n}${accidental ?? ""}`
+  );
   return index + 12 * (parseInt(octave) + 1);
 }
 
@@ -303,7 +333,10 @@ class SynthEngine {
   private stealVoice(): void {
     if (this.state.activeNotes.size < this.polyphony) return;
     // naive: stop the earliest note
-    const [oldest] = [...this.state.activeNotes.entries()].sort((a, b) => a[1].startTime - b[1].startTime)[0] ?? [];
+    const [oldest] =
+      [...this.state.activeNotes.entries()].sort(
+        (a, b) => a[1].startTime - b[1].startTime
+      )[0] ?? [];
     if (oldest != null) this.releaseNote(oldest);
   }
 
@@ -362,10 +395,11 @@ class SynthEngine {
   }
   clearModulation(sourceId?: string) {
     if (!sourceId) this.modMatrix = [];
-    else this.modMatrix = this.modMatrix.filter((e) => {
-      const s = e.source;
-      return "id" in s ? s.id !== sourceId : true;
-    });
+    else
+      this.modMatrix = this.modMatrix.filter((e) => {
+        const s = e.source;
+        return "id" in s ? s.id !== sourceId : true;
+      });
   }
 
   connect(from: string, to: string, options?: ConnectionOptions) {
@@ -388,7 +422,7 @@ class SynthEngine {
   }
 }
 
-import React from "react";
+import React, { useState } from "react";
 /* ---------------------------------------------------------------------------
  * 4. React Hook Wrapper
  * -------------------------------------------------------------------------*/
@@ -411,11 +445,10 @@ export function useSynth(config: UseSynthConfig): UseSynthReturn {
     }
   }, [config]);
 
-  /* MIDI hot‑plug (simple – full 2.0 impl omitted) */
-  const [midiIO, setMidiIO] = ((): [{ inputs: MIDIInput[]; outputs: MIDIOutput[] }, React.Dispatch<any>] => {
-    // eslint‑disable‑next‑line react-hooks/rules-of-hooks
-    return React.useState({ inputs: [], outputs: [] });
-  })();
+  const [midiIO, setMidiIO] = useState<{
+    inputs: MIDIInput[];
+    outputs: MIDIOutput[];
+  }>({ inputs: [], outputs: [] });
 
   useEffect(() => {
     if (!navigator.requestMIDIAccess) return;
@@ -432,9 +465,12 @@ export function useSynth(config: UseSynthConfig): UseSynthReturn {
   }, []);
 
   /* Public wrapper methods */
-  const triggerNote = useCallback<UseSynthReturn["triggerNote"]>((note, vel) => {
-    engineRef.current!.triggerNote(note, vel);
-  }, []);
+  const triggerNote = useCallback<UseSynthReturn["triggerNote"]>(
+    (note, vel) => {
+      engineRef.current!.triggerNote(note, vel);
+    },
+    []
+  );
 
   const releaseNote = useCallback<UseSynthReturn["releaseNote"]>((note) => {
     engineRef.current!.releaseNote(note);
@@ -448,9 +484,12 @@ export function useSynth(config: UseSynthConfig): UseSynthReturn {
     engineRef.current!.addModulation(e);
   }, []);
 
-  const clearModulation = useCallback<UseSynthReturn["clearModulation"]>((id) => {
-    engineRef.current!.clearModulation(id);
-  }, []);
+  const clearModulation = useCallback<UseSynthReturn["clearModulation"]>(
+    (id) => {
+      engineRef.current!.clearModulation(id);
+    },
+    []
+  );
 
   const connect = useCallback<UseSynthReturn["connect"]>((f, t, o) => {
     engineRef.current!.connect(f, t, o);
@@ -462,7 +501,10 @@ export function useSynth(config: UseSynthConfig): UseSynthReturn {
 
   const getState = useCallback(() => engineRef.current!.getState(), []);
 
-  const loadPreset = useCallback((preset: UseSynthConfig) => engineRef.current!.loadPreset(preset), []);
+  const loadPreset = useCallback(
+    (preset: UseSynthConfig) => engineRef.current!.loadPreset(preset),
+    []
+  );
 
   /* Cleanup on unmount */
   useEffect(() => () => engineRef.current?.dispose(), []);
