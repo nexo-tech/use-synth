@@ -62,7 +62,7 @@ const INITIAL_CONFIG: UseSynthConfig = {
   modulation: [
     {
       source: { type: "lfo", id: "vibrato" },
-      target: { path: "oscillators.main.detune" },
+      target: { path: "oscillator.main.detune" },
       amount: 20,
     },
   ],
@@ -75,97 +75,57 @@ const INITIAL_CONFIG: UseSynthConfig = {
 };
 
 export const SynthContainer: React.FC = () => {
-  const [synthConfig, setSynthConfig] = useState<UseSynthConfig>(INITIAL_CONFIG);
-  const synth = useSynth(synthConfig);
-
+  // const [synthConfig, setSynthConfig] = useState<UseSynthConfig>(INITIAL_CONFIG);
+  const synth = useSynth(INITIAL_CONFIG);
+  const synthConfig = synth.getConfig();
   // Update synth config when controls change
-  const updateSynthConfig = (newConfig: Partial<UseSynthConfig>) => {
-    setSynthConfig(prev => ({
-      ...prev,
-      components: {
-        ...prev.components,
-        ...newConfig.components
-      }
-    }));
-  };
+  const [, refresh] = useState(0);
 
   // Handlers for each component
   const handleOscChange = (config: OscillatorConfig) => {
-    const oscConfig = {
-      type: config.type || "sine",
-      detune: config.detune ?? 0,
-      level: config.level ?? 0.5,
-      unison: config.unison ? {
-        voices: config.unison.voices ?? 2,
-        spread: config.unison.spread ?? 0.5,
-        stereo: config.unison.stereo ?? 0.5
-      } : undefined
-    };
-    updateSynthConfig({
-      components: {
-        ...synthConfig.components,
-        oscillators: {
-          main: oscConfig
-        }
-      }
-    });
+    refresh(prev => prev + 1);
+    // Update individual parameters
+    if (config.detune !== undefined) synth.setParam("oscillator.main.detune", config.detune);
+    if (config.level !== undefined) synth.setParam("oscillator.main.level", config.level);
+    if (config.unison) {
+      if (config.unison.voices !== undefined) synth.setParam("oscillator.main.unison.voices", config.unison.voices);
+      if (config.unison.spread !== undefined) synth.setParam("oscillator.main.unison.spread", config.unison.spread);
+      if (config.unison.stereo !== undefined) synth.setParam("oscillator.main.unison.stereo", config.unison.stereo);
+    }
   };
 
   const handleFilterChange = (config: FilterConfig) => {
-    const filterConfig = {
-      type: config.type || "lowpass",
-      frequency: config.frequency ?? 1000,
-      Q: config.Q ?? 1,
-      gain: config.gain ?? 0,
-      keytrack: config.keytrack ?? 0,
-      envAmount: config.envAmount ?? 0
-    };
-    updateSynthConfig({
-      components: {
-        ...synthConfig.components,
-        filters: {
-          lpf: filterConfig
-        }
-      }
-    });
+    refresh(prev => prev + 1);
+
+    // Update individual parameters
+    if (config.frequency !== undefined) synth.setParam("filter.lpf.frequency", config.frequency);
+    if (config.Q !== undefined) synth.setParam("filter.lpf.Q", config.Q);
+    if (config.gain !== undefined) synth.setParam("filter.lpf.gain", config.gain);
+    if (config.keytrack !== undefined) synth.setParam("filter.lpf.keytrack", config.keytrack);
+    if (config.envAmount !== undefined) synth.setParam("filter.lpf.envAmount", config.envAmount);
   };
 
   const handleLFOChange = (config: LFOConfig) => {
-    const lfoConfig = {
-      type: config.type || "sine",
-      rate: config.rate ?? 1,
-      sync: config.sync ?? false,
-      shape: config.shape ?? 0,
-      phase: config.phase ?? 0,
-      delay: config.delay ?? 0,
-      fade: config.fade ?? 0
-    };
-    updateSynthConfig({
-      components: {
-        ...synthConfig.components,
-        lfos: {
-          vibrato: lfoConfig
-        }
-      }
-    });
+    refresh(prev => prev + 1);
+
+    // Update individual parameters
+    if (config.rate !== undefined) synth.setParam("lfo.vibrato.rate", config.rate);
+    if (config.sync !== undefined) synth.setParam("lfo.vibrato.sync", config.sync ? 1 : 0);
+    if (config.shape !== undefined) synth.setParam("lfo.vibrato.shape", config.shape);
+    if (config.phase !== undefined) synth.setParam("lfo.vibrato.phase", config.phase);
+    if (config.delay !== undefined) synth.setParam("lfo.vibrato.delay", config.delay);
+    if (config.fade !== undefined) synth.setParam("lfo.vibrato.fade", config.fade);
   };
 
   const handleEnvelopeChange = (config: EnvelopeConfig) => {
-    const envConfig = {
-      attack: config.attack ?? 0.01,
-      decay: config.decay ?? 0.1,
-      sustain: config.sustain ?? 0.5,
-      release: config.release ?? 0.1,
-      curvature: config.curvature ?? 0
-    };
-    updateSynthConfig({
-      components: {
-        ...synthConfig.components,
-        envelopes: {
-          amp: envConfig
-        }
-      }
-    });
+    refresh(prev => prev + 1);
+
+    // Update individual parameters
+    if (config.attack !== undefined) synth.setParam("envelope.amp.attack", config.attack);
+    if (config.decay !== undefined) synth.setParam("envelope.amp.decay", config.decay);
+    if (config.sustain !== undefined) synth.setParam("envelope.amp.sustain", config.sustain);
+    if (config.release !== undefined) synth.setParam("envelope.amp.release", config.release);
+    if (config.curvature !== undefined) synth.setParam("envelope.amp.curvature", config.curvature);
   };
 
   /* ------------------------------------------------------
@@ -218,7 +178,7 @@ export const SynthContainer: React.FC = () => {
   return (
     <div className="flex flex-col items-center gap-4 p-4">
       <h2 className="text-xl font-semibold">Synth Editor</h2>
-      
+
       <div className="grid grid-cols-2 gap-4 w-full max-w-4xl">
         <div className="col-span-2">
           <Osc
@@ -227,22 +187,22 @@ export const SynthContainer: React.FC = () => {
             onConfigChange={handleOscChange}
           />
         </div>
-        
+
         <div>
           <Filter
-          // @ts-ignore
+            // @ts-ignore
             config={synthConfig.components.filters.lpf}
             onConfigChange={handleFilterChange}
           />
         </div>
-        
+
         <div>
           <LFO
             config={synthConfig.components.lfos.vibrato}
             onConfigChange={handleLFOChange}
           />
         </div>
-        
+
         <div className="col-span-2">
           <Envelope
             config={synthConfig.components.envelopes.amp}
