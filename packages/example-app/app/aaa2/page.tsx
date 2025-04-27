@@ -383,15 +383,57 @@ class Engine2 {
     components: Map<string, AudioEngineNode> = new Map();
     private masterGain: MasterGain;
     private isResuming: boolean = false;
+    private currentConfig: UseSynthConfig;
 
     constructor() {
         this._context = new AudioContext();
         this.masterGain = new MasterGain(this, 'output');
         this.components.set('output', this.masterGain);
+        this.currentConfig = baseConfig;
     }
 
     get context() {
         return this._context;
+    }
+
+    getCurrentConfig(): UseSynthConfig {
+        // Update the current config with actual values from components
+        this.components.forEach((component, id) => {
+            if (component.type === 'oscillator') {
+                const osc = component as OscillatorEngineNode;
+                if (this.currentConfig.components.oscillators[id]) {
+                    // Update oscillator config
+                    const oscConfig = this.currentConfig.components.oscillators[id];
+                    // You can add more properties to sync here
+                    oscConfig.type = osc.config.type;
+                    oscConfig.detune = osc.config.detune;
+                    if (osc.envelope) {
+                        oscConfig.envelope = osc.envelope.id;
+                    }
+                }
+            } else if (component.type === 'filter') {
+                const filter = component as FilterEngineNode;
+                if (this.currentConfig.components.filters[id]) {
+                    // Update filter config
+                    const filterConfig = this.currentConfig.components.filters[id];
+                    filterConfig.type = filter.config.type;
+                    filterConfig.frequency = filter.config.frequency;
+                    filterConfig.Q = filter.config.Q;
+                }
+            } else if (component.type === 'adsr') {
+                const env = component as ADSREnvelope;
+                if (this.currentConfig.components.envelopes[id]) {
+                    // Update envelope config
+                    const envConfig = this.currentConfig.components.envelopes[id];
+                    envConfig.attack = env.config.attack;
+                    envConfig.decay = env.config.decay;
+                    envConfig.sustain = env.config.sustain;
+                    envConfig.release = env.config.release;
+                }
+            }
+        });
+
+        return this.currentConfig;
     }
 
     async ensureAudioContextActive(): Promise<boolean> {
@@ -453,30 +495,36 @@ class Engine2 {
 
     createFromConfig(config: UseSynthConfig) {
         console.log('[Engine] Creating synth from config:', config);
-
+        this.currentConfig = config;
+        
+        // Create oscillators
         Object.entries(config.components.oscillators).forEach(([id, oscConfig]) => {
             console.log(`[Engine] Creating oscillator ${id}:`, oscConfig);
             const osc = new OscillatorEngineNode(this, oscConfig, id);
             this.components.set(id, osc);
         });
 
+        // Create filters
         Object.entries(config.components.filters).forEach(([id, filterConfig]) => {
             console.log(`[Engine] Creating filter ${id}:`, filterConfig);
             const filter = new FilterEngineNode(this, filterConfig, id);
             this.components.set(id, filter);
         });
 
+        // Create envelopes
         Object.entries(config.components.envelopes).forEach(([id, envConfig]) => {
             console.log(`[Engine] Creating envelope ${id}:`, envConfig);
             const env = new ADSREnvelope(this, envConfig, id);
             this.components.set(id, env);
         });
 
+        // Connect components according to routing
         console.log('[Engine] Connecting components:');
         config.routing.forEach((connection) => {
             console.log(`[Engine] Connecting ${connection.from} -> ${connection.to}`);
             const fromNode = this.components.get(connection.from);
             const toNode = this.components.get(connection.to);
+            
             if (fromNode && toNode) {
                 fromNode.setOutput(toNode);
                 console.log(`[Engine] Successfully connected ${connection.from} -> ${connection.to}`);
@@ -533,12 +581,14 @@ const baseConfig: UseSynthConfig = {
 
 export default function OscillatorPage() {
     const [synth, setSynth] = React.useState<Engine2 | null>(null);
+    const [currentConfig, setCurrentConfig] = React.useState<UseSynthConfig | null>(null);
 
     React.useEffect(() => {
         // Initialize synth on component mount
         const newSynth = new Engine2();
         setSynth(newSynth);
         newSynth.createFromConfig(baseConfig);
+        setCurrentConfig(newSynth.getCurrentConfig());
 
         return () => {
             // Cleanup on unmount
@@ -548,22 +598,60 @@ export default function OscillatorPage() {
         };
     }, []);
 
+    const handleOscConfigChange = (oscId: string, newConfig: any) => {
+        if (!synth || !currentConfig) return;
+
+        // Update the config in place
+        const oscConfig = currentConfig.components.oscillators[oscId];
+        Object.assign(oscConfig, newConfig);
+
+        // Recreate the synth with updated config
+        synth.createFromConfig(currentConfig);
+        
+        // Create a new reference to trigger re-render
+        setCurrentConfig({...currentConfig});
+    };
+
     return (
         <main className="flex min-h-screen flex-col items-center justify-center p-8 bg-gray-950 text-white">
-            <button
-                onMouseDown={async () => {
-                    if (!synth) return;
-                    console.log('[UI] Playing note');
-                    await synth.playNote();
-                }}
-                onMouseUp={async () => {
-                    if (!synth) return;
-                    console.log('[UI] Stopping note');
-                    await synth.stopNote();
-                }}
-            >
-                Play C4
-            </button>
+            <div className="flex flex-col gap-4">
+                {currentConfig?.components.oscillators && Object.entries(currentConfig.components.oscillators).map(([id, config]) => (
+                    <div key={id} className="flex flex-col items-center">
+                        <h3 className="text-sm font-quantico mb-2 text-gray-400">Oscillator {id}</h3>
+                        <Osc
+                            config={{
+                                type: config.type,
+                                detune: config.detune ?? 0,
+                                level: config.level ?? 0.5,
+                                unison: config.unison ? {
+                                    voices: config.unison.voices,
+                                    spread: config.unison.spread,
+                                    stereo: config.unison.stereo ?? 0
+                                } : undefined
+                            }}
+                            onConfigChange={(newConfig) => handleOscConfigChange(id, newConfig)}
+                        />
+                    </div>
+                ))}
+            </div>
+
+            <div className="mt-8">
+                <button
+                    onMouseDown={async () => {
+                        if (!synth) return;
+                        console.log('[UI] Playing note');
+                        await synth.playNote();
+                    }}
+                    onMouseUp={async () => {
+                        if (!synth) return;
+                        console.log('[UI] Stopping note');
+                        await synth.stopNote();
+                    }}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-quantico transition-colors"
+                >
+                    Play C4
+                </button>
+            </div>
         </main>
     );
 }
