@@ -32,11 +32,17 @@ class OscillatorEngineNodeInstance {
     isOscStartedPlaying: boolean = false;
 
     constructor(context: AudioContext) {
+        console.log('[OscInstance] Creating new oscillator instance');
         this.osc = context.createOscillator();
         this.adsrGain = context.createGain();
         this.masterGain = context.createGain();
         this.adsrGain.connect(this.masterGain);
         this.osc.connect(this.adsrGain);
+        console.log('[OscInstance] Created and connected nodes:', {
+            osc: this.osc,
+            adsrGain: this.adsrGain,
+            masterGain: this.masterGain
+        });
     }
 }
 
@@ -78,24 +84,28 @@ class ADSREnvelope implements AudioEngineNode {
 
     handleStartNode(node: GainNode) {
         const now = this.engine.context.currentTime;
-
+        console.log(`[ADSR ${this.id}] Starting envelope at time ${now}`, this.config);
 
         node.gain.cancelScheduledValues(now);
         node.gain.setValueAtTime(0, now); // reset
 
         // Attack phase
         node.gain.linearRampToValueAtTime(1.0, now + this.config.attack);
+        console.log(`[ADSR ${this.id}] Attack phase to 1.0 at ${now + this.config.attack}`);
 
         // Decay phase
         node.gain.linearRampToValueAtTime(this.config.sustain, now + this.config.attack + this.config.decay);
+        console.log(`[ADSR ${this.id}] Decay phase to ${this.config.sustain} at ${now + this.config.attack + this.config.decay}`);
     }
     handleStopNode(gainNode: GainNode) {
         const now = this.engine.context.currentTime;
+        console.log(`[ADSR ${this.id}] Stopping envelope at time ${now}`, {
+            currentGain: gainNode.gain.value,
+            releaseTime: this.config.release
+        });
 
         gainNode.gain.cancelScheduledValues(now);
-
-        // Release phase
-        gainNode.gain.setValueAtTime(gainNode.gain.value, now); // set current value
+        gainNode.gain.setValueAtTime(gainNode.gain.value, now);
         gainNode.gain.linearRampToValueAtTime(0, now + this.config.release);
     }
 }
@@ -191,54 +201,66 @@ class OscillatorEngineNode implements AudioEngineNode {
     }
 
     handleStartNode(note: number, velocity: number) {
+        console.log(`[Osc ${this.id}] Starting note ${note} with velocity ${velocity}`);
         const instance = new OscillatorEngineNodeInstance(this.engine.context);
         instance.osc.type = this.config.type;
         instance.osc.detune.value = this.config.detune || 0;
 
-        instance.osc.frequency.value = midiToFreq(note);
+        const freq = midiToFreq(note);
+        instance.osc.frequency.value = freq;
+        console.log(`[Osc ${this.id}] Set frequency to ${freq}Hz for note ${note}`);
+
         if (instance.isOscStartedPlaying) {
+            console.log(`[Osc ${this.id}] Oscillator was already playing, stopping it`);
             instance.osc.stop(this.engine.context.currentTime + 1);
             instance.isOscStartedPlaying = false;
         }
+
         if (this.envelope) {
+            console.log(`[Osc ${this.id}] Applying envelope ${this.envelope.id}`);
             this.envelope.handleStartNode(instance.adsrGain);
         }
-        // apply velocity to gain
+
         instance.masterGain.gain.value = velocity / 127;
+        console.log(`[Osc ${this.id}] Set gain to ${velocity / 127}`);
+
         instance.osc.start();
         instance.isOscStartedPlaying = true;
-        
+        console.log(`[Osc ${this.id}] Started oscillator`);
+
         this.instances.set(note, instance);
     }
 
     handleStopNode(note: number) {
+        console.log(`[Osc ${this.id}] Stopping note ${note}`);
         const instance = this.instances.get(note);
         if (instance) {
             if (this.envelope) {
+                console.log(`[Osc ${this.id}] Applying envelope release`);
                 this.envelope.handleStopNode(instance.adsrGain);
             }
             this.instances.delete(note);
             if (this.envelope) {
-                // based on release time, schedule stop
-                // if release is 0, stop immediately
                 if (this.envelope.config.release === 0) {
+                    console.log(`[Osc ${this.id}] Immediate release`);
                     this.envelope.handleStopNode(instance.adsrGain);
                     instance.osc.disconnect();
                     instance.osc.stop();
-
                     instance.adsrGain.disconnect();
                     instance.masterGain.disconnect();
                 } else {
+                    console.log(`[Osc ${this.id}] Scheduling release after ${this.envelope.config.release}s`);
                     setTimeout(() => {
                         this.envelope?.handleStopNode(instance.adsrGain);
                         instance.osc.disconnect();
                         instance.osc.stop();
-
                         instance.adsrGain.disconnect();
                         instance.masterGain.disconnect();
                     }, this.envelope.config.release * 1000);
                 }
             }
+        } else {
+            console.log(`[Osc ${this.id}] No instance found for note ${note}`);
         }
     }
 }
@@ -314,31 +336,44 @@ class Engine2 {
     }
 
     createFromConfig(config: UseSynthConfig) {
+        console.log('[Engine] Creating synth from config:', config);
+        
         // Create oscillators
         Object.entries(config.components.oscillators).forEach(([id, oscConfig]) => {
+            console.log(`[Engine] Creating oscillator ${id}:`, oscConfig);
             const osc = new OscillatorEngineNode(this, oscConfig, id);
             this.components.set(id, osc);
         });
 
         // Create filters
         Object.entries(config.components.filters).forEach(([id, filterConfig]) => {
+            console.log(`[Engine] Creating filter ${id}:`, filterConfig);
             const filter = new FilterEngineNode(this, filterConfig, id);
             this.components.set(id, filter);
         });
 
         // Create envelopes
         Object.entries(config.components.envelopes).forEach(([id, envConfig]) => {
+            console.log(`[Engine] Creating envelope ${id}:`, envConfig);
             const env = new ADSREnvelope(this, envConfig, id);
             this.components.set(id, env);
         });
 
         // Connect components according to routing
+        console.log('[Engine] Connecting components:');
         config.routing.forEach(connection => {
+            console.log(`[Engine] Connecting ${connection.from} -> ${connection.to}`);
             const fromNode = this.components.get(connection.from);
             const toNode = this.components.get(connection.to);
-
+            
             if (fromNode && toNode) {
                 fromNode.setOutput(toNode);
+                console.log(`[Engine] Successfully connected ${connection.from} -> ${connection.to}`);
+            } else {
+                console.error(`[Engine] Failed to connect ${connection.from} -> ${connection.to}:`, {
+                    fromNodeExists: !!fromNode,
+                    toNodeExists: !!toNode
+                });
             }
         });
 
@@ -346,18 +381,26 @@ class Engine2 {
         Object.entries(config.components.oscillators).forEach(([id, oscConfig]) => {
             const osc = this.components.get(id) as OscillatorEngineNode;
             if (oscConfig.envelope) {
+                console.log(`[Engine] Connecting envelope ${oscConfig.envelope} to oscillator ${id}`);
                 const env = this.components.get(oscConfig.envelope);
                 if (env && env.type === 'adsr') {
                     osc.envelope = env as ADSREnvelope;
+                    console.log(`[Engine] Successfully connected envelope ${oscConfig.envelope} to oscillator ${id}`);
+                } else {
+                    console.error(`[Engine] Failed to connect envelope ${oscConfig.envelope} to oscillator ${id}:`, {
+                        envExists: !!env,
+                        envType: env?.type
+                    });
                 }
             }
         });
     }
 
     playNote(note: number = 60, velocity: number = 127) {
-        // Find all oscillators and trigger them
+        console.log('[Engine] Playing note:', { note, velocity });
         this.components.forEach(component => {
             if (component.type === 'oscillator') {
+                console.log(`[Engine] Triggering oscillator ${component.id}`);
                 const osc = component as OscillatorEngineNode;
                 osc.handleStartNode(note, velocity);
             }
@@ -365,9 +408,10 @@ class Engine2 {
     }
 
     stopNote(note: number = 60) {
-        // Find all oscillators and stop them
+        console.log('[Engine] Stopping note:', note);
         this.components.forEach(component => {
             if (component.type === 'oscillator') {
+                console.log(`[Engine] Stopping oscillator ${component.id}`);
                 const osc = component as OscillatorEngineNode;
                 osc.handleStopNode(note);
             }
@@ -402,8 +446,8 @@ const baseConfig: UseSynthConfig = {
         },
     },
     routing: [
-        { from: "main", to: "lpf" },
-        { from: "lpf", to: "output" },
+        { from: "main", to: "output" },
+        // { from: "lpf", to: "output" },
     ],
     // modulation: [
     //     {
@@ -424,8 +468,10 @@ export default function OscillatorPage() {
     return (
         <main className="flex min-h-screen flex-col items-center justify-center p-8 bg-gray-950 text-white">
             <button onClick={() => {
+                console.log('[UI] Button clicked, creating synth');
                 const synth = new Engine2();
                 synth.createFromConfig(baseConfig);
+                console.log('[UI] Playing note');
                 synth.playNote();
             }}>Play C4</button>
         </main>
