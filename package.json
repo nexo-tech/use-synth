@@ -20,5 +20,8 @@
     "node": ">=18.0.0",
     "bun": ">=1.0.0"
   },
-  "packageManager": "bun@1.0.31"
-} 
+  "packageManager": "bun@1.0.31",
+  "dependencies": {
+    "tsx": "^4.19.3"
+  }
+}

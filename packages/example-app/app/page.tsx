@@ -1,8 +1,8 @@
 'use client';
 
 import React from 'react';
-import SynthContainer from './components/SynthContainer';
-import './globals.css';
+import { SynthPad } from './components/SynthContainer';
+// import './globals.css';
 
 export default function Home() {
   return (
@@ -11,9 +11,9 @@ export default function Home() {
         <h1 className="text-4xl font-bold mb-8 text-center">
           useSynth Example
         </h1>
-        
-        <SynthContainer />
-        
+
+        <SynthPad />
+
         <div className="mt-12 opacity-80 text-sm text-center">
           <p>
             Built with <a href="https://github.com/yourusername/useSynth" className="underline hover:text-blue-500">useSynth</a>

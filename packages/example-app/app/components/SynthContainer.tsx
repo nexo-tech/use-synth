@@ -1,111 +1,131 @@
-'use client';
+import React, { useCallback, useEffect } from "react";
+import { useSynth } from "use-synth";
 
-import React, { useState, useEffect } from 'react';
-import { useSynth, SynthConfig, EnvelopeConfig, FilterConfig, OscillatorConfig } from 'use-synth';
+/*
+ * A minimal demo component that wires the `useSynth` hook to a simple
+ * on-screen keyboard and basic computer-keyboard mapping.
+ * Feel free to style / expand – this is just a quick starting point.
+ */
 
-// Basic synth configuration
-const initialConfig: SynthConfig = {
-  oscillators: [
-    { type: 'sine', gain: 0.5, detune: 0 },
-    { type: 'sawtooth', gain: 0.5, detune: 0 },
-  ],
-  filters: [
-    { type: 'lowpass', frequency: 1000, Q: 1, gain: 1 }
-  ],
-  effects: [
-    { type: 'delay', delayTime: 0.5, feedback: 0.5, mix: 0.5 },
-    { type: 'reverb', roomSize: 0.8, dampening: 3000, mix: 0.5 }
-  ],
-  lfos: [
-    { type: 'sine', frequency: 5, amplitude: 1 }
-  ],
-  envelopes: [
-    { attack: 0.01, decay: 0.1, sustain: 0.8, release: 0.5 }
-  ],
-  routing: {
-    oscillatorsToFilter: true,
-    filterToEffects: true,
-  },
-  modulation: {
-    lfo1ToFilterFrequency: 0.5,
-    envelope1ToOscillatorGain: 0.8,
-  },
-  input: {
-    midiEnabled: true,
-    audioEnabled: false,
-  }
+// --- Helper: build a very small keyboard map (ASDF row) ---
+const KEYBOARD_MAP: Record<string, { note: number }> = {
+  KeyA: { note: 60 }, // C4
+  KeyW: { note: 61 }, // C#4
+  KeyS: { note: 62 }, // D4
+  KeyE: { note: 63 }, // D#4
+  KeyD: { note: 64 }, // E4
+  KeyF: { note: 65 }, // F4
+  KeyT: { note: 66 },
+  KeyG: { note: 67 },
+  KeyY: { note: 68 },
+  KeyH: { note: 69 },
+  KeyU: { note: 70 },
+  KeyJ: { note: 71 },
+  KeyK: { note: 72 }, // C5
 };
 
-export const SynthContainer: React.FC = () => {
-  const [filterFrequency, setFilterFrequency] = useState<number>(1000);
-  const [oscillatorMix, setOscillatorMix] = useState<number>(0.5);
-  
-  const { synth, updateConfig, noteOn, noteOff } = useSynth(initialConfig);
-  
+// --- Static preset config (saw pad) ---
+const PRESET: UseSynthConfig = {
+  components: {
+    oscillators: {
+      main: {
+        type: "sawtooth",
+        detune: -7,
+        unison: { voices: 5, spread: 25, stereo: 50 },
+      },
+    },
+    filters: {
+      lpf: {
+        type: "lowpass",
+        frequency: 1600,
+        Q: 0.9,
+        envAmount: 0.4,
+      },
+    },
+    effects: {},
+    lfos: {
+      vibrato: { type: "sine", rate: 5, sync: false },
+    },
+    envelopes: {
+      amp: { attack: 0.05, decay: 0.2, sustain: 0.8, release: 0.4 },
+    },
+  },
+  routing: [
+    { from: "main", to: "lpf" },
+    { from: "lpf", to: "output" },
+  ],
+  modulation: [
+    {
+      source: { type: "lfo", id: "vibrato" },
+      target: { path: "oscillators.main.detune" },
+      amount: 20,
+    },
+  ],
+  input: {
+    keyboard: {
+      mapping: KEYBOARD_MAP,
+      velocity: "dynamic",
+    },
+  },
+};
+
+export const SynthPad: React.FC = () => {
+  const synth = useSynth(PRESET);
+
+  /* ------------------------------------------------------
+   * Computer keyboard handling
+   * ----------------------------------------------------*/
+  const handleDown = useCallback(
+    (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      const map = PRESET.input.keyboard!.mapping[e.code];
+      if (map) {
+        synth.triggerNote(map.note, 1);
+      }
+    },
+    [synth]
+  );
+
+  const handleUp = useCallback(
+    (e: KeyboardEvent) => {
+      const map = PRESET.input.keyboard!.mapping[e.code];
+      if (map) synth.releaseNote(map.note);
+    },
+    [synth]
+  );
+
   useEffect(() => {
-    if (synth) {
-      updateConfig({
-        filters: [
-          { ...initialConfig.filters[0], frequency: filterFrequency }
-        ]
-      });
-    }
-  }, [filterFrequency, synth, updateConfig]);
-  
-  useEffect(() => {
-    if (synth) {
-      updateConfig({
-        oscillators: [
-          { ...initialConfig.oscillators[0], gain: 1 - oscillatorMix },
-          { ...initialConfig.oscillators[1], gain: oscillatorMix }
-        ]
-      });
-    }
-  }, [oscillatorMix, synth, updateConfig]);
-  
+    window.addEventListener("keydown", handleDown);
+    window.addEventListener("keyup", handleUp);
+    return () => {
+      window.removeEventListener("keydown", handleDown);
+      window.removeEventListener("keyup", handleUp);
+    };
+  }, [handleDown, handleUp]);
+
+  /* ------------------------------------------------------
+   * Simple on-screen button keyboard (click / touch)
+   * ----------------------------------------------------*/
+  const renderKeys = () =>
+    Object.entries(KEYBOARD_MAP).map(([code, { note }]) => (
+      <button
+        key={code}
+        className="m-1 w-8 h-24 rounded-lg shadow active:scale-95 transition"
+        onMouseDown={() => synth.triggerNote(note, 1)}
+        onMouseUp={() => synth.releaseNote(note)}
+        onMouseLeave={() => synth.releaseNote(note)}
+      >
+        {code.replace("Key", "")}
+      </button>
+    ));
+
   return (
-    <div className="synth-container">
-      <h2>Web Synthesizer</h2>
-      
-      <div className="controls">
-        <div className="control-group">
-          <label htmlFor="filter-frequency">Filter Frequency: {filterFrequency}Hz</label>
-          <input
-            id="filter-frequency"
-            type="range"
-            min="20"
-            max="20000"
-            value={filterFrequency}
-            onChange={(e) => setFilterFrequency(parseInt(e.target.value, 10))}
-          />
-        </div>
-        
-        <div className="control-group">
-          <label htmlFor="oscillator-mix">Oscillator Mix: {oscillatorMix}</label>
-          <input
-            id="oscillator-mix"
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            value={oscillatorMix}
-            onChange={(e) => setOscillatorMix(parseFloat(e.target.value))}
-          />
-        </div>
-      </div>
-      
-      <div className="modulation-matrix">
-        <h3>Modulation Matrix</h3>
-        {/* Modulation matrix controls would go here */}
-      </div>
-      
-      <div className="keyboard">
-        {/* Virtual keyboard would go here */}
-        {/* When a key is pressed: noteOn(note, velocity) */}
-        {/* When a key is released: noteOff(note) */}
-      </div>
+    <div className="flex flex-col items-center gap-4 p-4">
+      <h2 className="text-xl font-semibold">SynthPath Demo</h2>
+      <div className="flex">{renderKeys()}</div>
+      <p className="text-xs opacity-70">
+        Play with A-K keys or click the buttons.
+      </p>
     </div>
   );
 };
-
-export default SynthContainer; 

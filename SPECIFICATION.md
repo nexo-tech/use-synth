@@ -236,10 +236,6 @@ interface UseSynthReturn {
   // State
   getState: () => SynthState;
   loadPreset: (preset: UseSynthConfig) => void;
-
-  // UI
-  VirtualKeyboard: React.FC<VirtualKeyboardProps>;
-  ModulationMatrix: React.FC<MatrixProps>;
 }
 ```
 
@@ -303,7 +299,7 @@ type NoteData = {
 
 ```jsx
 const SynthPad = () => {
-  const { VirtualKeyboard, triggerNote } = useSynth({
+  const { triggerNote } = useSynth({
     components: {
       oscillators: {
         main: {
