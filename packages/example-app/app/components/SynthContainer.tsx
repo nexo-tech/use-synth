@@ -1,5 +1,9 @@
-import React, { useCallback, useEffect } from "react";
-import { useSynth, UseSynthConfig } from "use-synth";
+import React, { useCallback, useEffect, useState } from "react";
+import { useSynth, UseSynthConfig, UseSynthReturn, OscillatorConfig, FilterConfig, LFOConfig, EnvelopeConfig } from "use-synth";
+import { Osc } from "./Osc";
+import { LFO } from "./LFO";
+import { Envelope } from "./Envelope";
+import { Filter } from "./Filter";
 
 /*
  * A minimal demo component that wires the `useSynth` hook to a simple
@@ -24,8 +28,8 @@ const KEYBOARD_MAP: Record<string, { note: number }> = {
   KeyK: { note: 72 }, // C5
 };
 
-// --- Static preset config (saw pad) ---
-const PRESET: UseSynthConfig = {
+// --- Initial config ---
+const INITIAL_CONFIG: UseSynthConfig = {
   components: {
     oscillators: {
       main: {
@@ -70,8 +74,99 @@ const PRESET: UseSynthConfig = {
   },
 };
 
-export const SynthPath: React.FC = () => {
-  const synth = useSynth(PRESET);
+export const SynthContainer: React.FC = () => {
+  const [synthConfig, setSynthConfig] = useState<UseSynthConfig>(INITIAL_CONFIG);
+  const synth = useSynth(synthConfig);
+
+  // Update synth config when controls change
+  const updateSynthConfig = (newConfig: Partial<UseSynthConfig>) => {
+    setSynthConfig(prev => ({
+      ...prev,
+      components: {
+        ...prev.components,
+        ...newConfig.components
+      }
+    }));
+  };
+
+  // Handlers for each component
+  const handleOscChange = (config: OscillatorConfig) => {
+    const oscConfig = {
+      type: config.type || "sine",
+      detune: config.detune ?? 0,
+      level: config.level ?? 0.5,
+      unison: config.unison ? {
+        voices: config.unison.voices ?? 2,
+        spread: config.unison.spread ?? 0.5,
+        stereo: config.unison.stereo ?? 0.5
+      } : undefined
+    };
+    updateSynthConfig({
+      components: {
+        ...synthConfig.components,
+        oscillators: {
+          main: oscConfig
+        }
+      }
+    });
+  };
+
+  const handleFilterChange = (config: FilterConfig) => {
+    const filterConfig = {
+      type: config.type || "lowpass",
+      frequency: config.frequency ?? 1000,
+      Q: config.Q ?? 1,
+      gain: config.gain ?? 0,
+      keytrack: config.keytrack ?? 0,
+      envAmount: config.envAmount ?? 0
+    };
+    updateSynthConfig({
+      components: {
+        ...synthConfig.components,
+        filters: {
+          lpf: filterConfig
+        }
+      }
+    });
+  };
+
+  const handleLFOChange = (config: LFOConfig) => {
+    const lfoConfig = {
+      type: config.type || "sine",
+      rate: config.rate ?? 1,
+      sync: config.sync ?? false,
+      shape: config.shape ?? 0,
+      phase: config.phase ?? 0,
+      delay: config.delay ?? 0,
+      fade: config.fade ?? 0
+    };
+    updateSynthConfig({
+      components: {
+        ...synthConfig.components,
+        lfos: {
+          vibrato: lfoConfig
+        }
+      }
+    });
+  };
+
+  const handleEnvelopeChange = (config: EnvelopeConfig) => {
+    const envConfig = {
+      attack: config.attack ?? 0.01,
+      decay: config.decay ?? 0.1,
+      sustain: config.sustain ?? 0.5,
+      release: config.release ?? 0.1,
+      curvature: config.curvature ?? 0
+    };
+    updateSynthConfig({
+      components: {
+        ...synthConfig.components,
+        envelopes: {
+          amp: envConfig
+        }
+      }
+    });
+  };
 
   /* ------------------------------------------------------
    * Computer keyboard handling
@@ -79,20 +174,20 @@ export const SynthPath: React.FC = () => {
   const handleDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.repeat) return;
-      const map = PRESET.input.keyboard!.mapping[e.code];
+      const map = synthConfig.input.keyboard!.mapping[e.code];
       if (map) {
         synth.triggerNote(map.note, 1);
       }
     },
-    [synth]
+    [synth, synthConfig]
   );
 
   const handleUp = useCallback(
     (e: KeyboardEvent) => {
-      const map = PRESET.input.keyboard!.mapping[e.code];
+      const map = synthConfig.input.keyboard!.mapping[e.code];
       if (map) synth.releaseNote(map.note);
     },
-    [synth]
+    [synth, synthConfig]
   );
 
   useEffect(() => {
@@ -122,11 +217,46 @@ export const SynthPath: React.FC = () => {
 
   return (
     <div className="flex flex-col items-center gap-4 p-4">
-      <h2 className="text-xl font-semibold">SynthPath Demo</h2>
-      <div className="flex">{renderKeys()}</div>
-      <p className="text-xs opacity-70">
-        Play with A‑K keys or click the buttons.
-      </p>
+      <h2 className="text-xl font-semibold">Synth Editor</h2>
+      
+      <div className="grid grid-cols-2 gap-4 w-full max-w-4xl">
+        <div className="col-span-2">
+          <Osc
+            // @ts-ignore
+            config={synthConfig.components.oscillators.main}
+            onConfigChange={handleOscChange}
+          />
+        </div>
+        
+        <div>
+          <Filter
+          // @ts-ignore
+            config={synthConfig.components.filters.lpf}
+            onConfigChange={handleFilterChange}
+          />
+        </div>
+        
+        <div>
+          <LFO
+            config={synthConfig.components.lfos.vibrato}
+            onConfigChange={handleLFOChange}
+          />
+        </div>
+        
+        <div className="col-span-2">
+          <Envelope
+            config={synthConfig.components.envelopes.amp}
+            onConfigChange={handleEnvelopeChange}
+          />
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <div className="flex">{renderKeys()}</div>
+        <p className="text-xs opacity-70 mt-2">
+          Play with A‑K keys or click the buttons.
+        </p>
+      </div>
     </div>
   );
 };

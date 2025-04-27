@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { SynthPath as SynthPad } from './components/SynthContainer';
+import { SynthContainer } from './components/SynthContainer';
 
 export default function Home() {
   return (
@@ -11,7 +11,7 @@ export default function Home() {
           useSynth Example
         </h1>
 
-        <SynthPad />
+        <SynthContainer />
 
         <div className="mt-12 opacity-80 text-sm text-center">
           <p>
