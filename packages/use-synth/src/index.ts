@@ -368,7 +368,7 @@ class SynthEngine {
     });
   }
 
-  connect(from: string, to: string) {
+  connect(from: string, to: string, options?: ConnectionOptions) {
     const src = this.nodes.get(from);
     const dst = this.nodes.get(to);
     src?.connect(dst!);
