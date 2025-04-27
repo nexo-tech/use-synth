@@ -22,12 +22,14 @@ export interface OscillatorConfig {
     level?: number;
     unison?: { voices: number; spread: number; stereo?: number };
     customWave?: Float32Array;
+    envelope?: string;  // ID of the envelope to use
 }
 
 class OscillatorEngineNodeInstance {
     osc: OscillatorNode;
     adsrGain: GainNode;
     masterGain: GainNode;
+    isOscStartedPlaying: boolean = false;
 
     constructor(context: AudioContext) {
         this.osc = context.createOscillator();
@@ -52,17 +54,28 @@ export interface EnvelopeConfig {
 }
 
 
-class ADSREnvelope implements EngineNode {
+class ADSREnvelope implements AudioEngineNode {
     static nextID = 0;
     type = 'adsr';
     id: string;
     config: EnvelopeConfig;
-    engine: Engine2
+    engine: Engine2;
+    outputs: AudioEngineNode[] = [];
+
+    setOutput(node: AudioEngineNode) {
+        this.outputs.push(node);
+    }
+
+    handleInputAudio(audioNode: AudioNode) {
+        // Envelopes don't directly handle audio input
+    }
+
     constructor(engine: Engine2, config: EnvelopeConfig, id?: string) {
         this.id = id || this.type.substring(0, 3) + ADSREnvelope.nextID++;
         this.config = config;
         this.engine = engine;
     }
+
     handleStartNode(node: GainNode) {
         const now = this.engine.context.currentTime;
 
@@ -183,14 +196,18 @@ class OscillatorEngineNode implements AudioEngineNode {
         instance.osc.detune.value = this.config.detune || 0;
 
         instance.osc.frequency.value = midiToFreq(note);
-        instance.osc.stop(this.engine.context.currentTime + 1);
+        if (instance.isOscStartedPlaying) {
+            instance.osc.stop(this.engine.context.currentTime + 1);
+            instance.isOscStartedPlaying = false;
+        }
         if (this.envelope) {
             this.envelope.handleStartNode(instance.adsrGain);
         }
         // apply velocity to gain
         instance.masterGain.gain.value = velocity / 127;
         instance.osc.start();
-
+        instance.isOscStartedPlaying = true;
+        
         this.instances.set(note, instance);
     }
 
@@ -283,21 +300,82 @@ export interface UseSynthConfig {
 
 class Engine2 {
     _context: AudioContext;
+    private components: Map<string, AudioEngineNode> = new Map();
+    private masterGain: MasterGain;
 
     constructor() {
         this._context = new AudioContext();
-    }
-
-    handleEvent(event: NoteStartEvent | NoteStopEvent) {
+        this.masterGain = new MasterGain(this, "output");
+        this.components.set("output", this.masterGain);
     }
 
     get context() {
         return this._context;
     }
 
+    createFromConfig(config: UseSynthConfig) {
+        // Create oscillators
+        Object.entries(config.components.oscillators).forEach(([id, oscConfig]) => {
+            const osc = new OscillatorEngineNode(this, oscConfig, id);
+            this.components.set(id, osc);
+        });
+
+        // Create filters
+        Object.entries(config.components.filters).forEach(([id, filterConfig]) => {
+            const filter = new FilterEngineNode(this, filterConfig, id);
+            this.components.set(id, filter);
+        });
+
+        // Create envelopes
+        Object.entries(config.components.envelopes).forEach(([id, envConfig]) => {
+            const env = new ADSREnvelope(this, envConfig, id);
+            this.components.set(id, env);
+        });
+
+        // Connect components according to routing
+        config.routing.forEach(connection => {
+            const fromNode = this.components.get(connection.from);
+            const toNode = this.components.get(connection.to);
+
+            if (fromNode && toNode) {
+                fromNode.setOutput(toNode);
+            }
+        });
+
+        // Connect oscillators to their envelopes
+        Object.entries(config.components.oscillators).forEach(([id, oscConfig]) => {
+            const osc = this.components.get(id) as OscillatorEngineNode;
+            if (oscConfig.envelope) {
+                const env = this.components.get(oscConfig.envelope);
+                if (env && env.type === 'adsr') {
+                    osc.envelope = env as ADSREnvelope;
+                }
+            }
+        });
+    }
+
+    playNote(note: number = 60, velocity: number = 127) {
+        // Find all oscillators and trigger them
+        this.components.forEach(component => {
+            if (component.type === 'oscillator') {
+                const osc = component as OscillatorEngineNode;
+                osc.handleStartNode(note, velocity);
+            }
+        });
+    }
+
+    stopNote(note: number = 60) {
+        // Find all oscillators and stop them
+        this.components.forEach(component => {
+            if (component.type === 'oscillator') {
+                const osc = component as OscillatorEngineNode;
+                osc.handleStopNode(note);
+            }
+        });
+    }
 }
 
-const baseConfig = {
+const baseConfig: UseSynthConfig = {
     components: {
         oscillators: {
             main: {
@@ -343,12 +421,11 @@ const baseConfig = {
 }
 
 export default function OscillatorPage() {
-
-
     return (
         <main className="flex min-h-screen flex-col items-center justify-center p-8 bg-gray-950 text-white">
             <button onClick={() => {
                 const synth = new Engine2();
+                synth.createFromConfig(baseConfig);
                 synth.playNote();
             }}>Play C4</button>
         </main>
