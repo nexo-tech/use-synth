@@ -342,9 +342,10 @@ class OscillatorEngineNode implements AudioEngineNode {
     engine: Engine2;
     id: string;
     envelope: ADSREnvelope | null = null;
-    instances: Map<number, OscillatorEngineNodeInstance> = new Map();
+    instances: Map<string, OscillatorEngineNodeInstance> = new Map();
     config: OscillatorConfig;
     outputs: AudioEngineNode[] = [];
+    private nextInstanceId = 0;
 
     static nextID = 0;
 
@@ -366,8 +367,9 @@ class OscillatorEngineNode implements AudioEngineNode {
         this.config = config;
     }
 
-    handleStartNode(note: number, velocity: number) {
+    handleStartNode(note: number, velocity: number): string {
         console.log(`[Osc ${this.id}] Starting note ${note} with velocity ${velocity}`);
+        const instanceId = `${this.id}_${this.nextInstanceId++}`;
         const instance = new OscillatorEngineNodeInstance(this.engine.context, this.config);
 
         const freq = midiToFreq(note);
@@ -382,18 +384,20 @@ class OscillatorEngineNode implements AudioEngineNode {
         }
 
         instance.start();
-        this.instances.set(note, instance);
+        this.instances.set(instanceId, instance);
 
         // hook this voice into the master output
         const master = this.engine.components.get('output') as MasterGain;
         if (master) master.handleInputAudio(instance.masterGain);
+
+        return instanceId;
     }
 
-    handleStopNode(note: number) {
-        console.log(`[Osc ${this.id}] Stopping note ${note}`);
-        const instance = this.instances.get(note);
+    handleStopNode(instanceId: string) {
+        console.log(`[Osc ${this.id}] Stopping instance ${instanceId}`);
+        const instance = this.instances.get(instanceId);
         if (!instance) {
-            console.log(`[Osc ${this.id}] No instance found for note ${note}`);
+            console.log(`[Osc ${this.id}] No instance found for ID ${instanceId}`);
             return;
         }
 
@@ -412,10 +416,10 @@ class OscillatorEngineNode implements AudioEngineNode {
 
         // Schedule the cleanup
         setTimeout(() => {
-            if (this.instances.has(note)) { // Double check the note is still there
+            if (this.instances.has(instanceId)) { // Double check the instance is still there
                 instance.stop();
                 instance.disconnect();
-                this.instances.delete(note);
+                this.instances.delete(instanceId);
             }
         }, (releaseTime + 0.01) * 1000); // Convert to milliseconds
     }
@@ -480,8 +484,8 @@ class Engine2 {
     private masterGain: MasterGain;
     private isResuming: boolean = false;
     private currentConfig: UseSynthConfig;
-    private activeNotes: Set<number> = new Set();
-    private voiceAllocation: Map<number, string> = new Map(); // Maps note to oscillator ID
+    private activeNotes: Map<string, { note: number; oscId: string; instanceId: string }> = new Map();
+    private keyToInstanceId: Map<string, string> = new Map(); // Maps keyboard key to instance ID
 
     constructor() {
         this._context = new AudioContext();
@@ -565,49 +569,64 @@ class Engine2 {
         return true;
     }
 
-    async playNote(note = 60, velocity = 127) {
+    async playNote(note = 60, velocity = 127, key: string): Promise<string | null> {
         const isActive = await this.ensureAudioContextActive();
         if (!isActive) {
             console.warn('[Engine] Cannot play note - AudioContext is not active');
-            return;
+            return null;
         }
 
         // Check polyphony limit
         if (this.activeNotes.size >= this.currentConfig.polyphony) {
             console.warn('[Engine] Polyphony limit reached, note ignored');
-            return;
+            return null;
         }
 
-        console.log('[Engine] Playing note:', { note, velocity });
+        console.log('[Engine] Playing note:', { note, velocity, key });
+        let instanceId: string | null = null;
+
         this.components.forEach((component) => {
             if (component.type === 'oscillator') {
                 const osc = component as OscillatorEngineNode;
                 // Check if this oscillator has reached its voice limit
                 if (osc.instances.size < this.currentConfig.maxVoices) {
-                    osc.handleStartNode(note, velocity);
-                    this.activeNotes.add(note);
-                    this.voiceAllocation.set(note, osc.id);
+                    instanceId = osc.handleStartNode(note, velocity);
+                    if (instanceId) {
+                        this.activeNotes.set(instanceId, { note, oscId: osc.id, instanceId });
+                        this.keyToInstanceId.set(key, instanceId);
+                    }
                 }
             }
         });
+
+        return instanceId;
     }
 
-    async stopNote(note = 60) {
+    async stopNote(key: string) {
         const isActive = await this.ensureAudioContextActive();
         if (!isActive) {
             console.warn('[Engine] Cannot stop note - AudioContext is not active');
             return;
         }
 
-        console.log('[Engine] Stopping note:', note);
-        const oscId = this.voiceAllocation.get(note);
-        if (oscId) {
-            const osc = this.components.get(oscId) as OscillatorEngineNode;
-            if (osc) {
-                osc.handleStopNode(note);
-                this.activeNotes.delete(note);
-                this.voiceAllocation.delete(note);
-            }
+        const instanceId = this.keyToInstanceId.get(key);
+        if (!instanceId) {
+            console.warn('[Engine] No instance found for key:', key);
+            return;
+        }
+
+        const noteInfo = this.activeNotes.get(instanceId);
+        if (!noteInfo) {
+            console.warn('[Engine] No note info found for instance:', instanceId);
+            return;
+        }
+
+        console.log('[Engine] Stopping note:', { key, instanceId, note: noteInfo.note });
+        const osc = this.components.get(noteInfo.oscId) as OscillatorEngineNode;
+        if (osc) {
+            osc.handleStopNode(instanceId);
+            this.activeNotes.delete(instanceId);
+            this.keyToInstanceId.delete(key);
         }
     }
 
@@ -703,7 +722,7 @@ export default function OscillatorPage() {
     const synth = React.useRef<Engine2 | null>(null);
     const [currentConfig, setCurrentConfig] = React.useState<UseSynthConfig | null>(null);
     const [currentOctave, setCurrentOctave] = React.useState(4); // Middle C is C4
-    const activeNotesRef = React.useRef<Set<number>>(new Set());
+    const activeNotesRef = React.useRef<Set<string>>(new Set());
     const currentOctaveRef = React.useRef(4);
     // Map keyboard keys to MIDI notes
     const keyToNote: Record<string, number> = {
@@ -747,10 +766,10 @@ export default function OscillatorPage() {
 
         // Handle note playing
         const baseNote = keyToNote[key];
-        if (baseNote !== undefined && !activeNotesRef.current.has(baseNote)) {
+        if (baseNote !== undefined && !activeNotesRef.current.has(key)) {
             const note = baseNote + (currentOctaveRef.current - 4) * 12;
-            activeNotesRef.current.add(note);
-            await synth.current?.playNote(note);
+            activeNotesRef.current.add(key);
+            await synth.current?.playNote(note, 127, key);
         }
     };
 
@@ -758,11 +777,9 @@ export default function OscillatorPage() {
         if (!synth.current) return;
 
         const key = e.key.toLowerCase();
-        const baseNote = keyToNote[key];
-        if (baseNote !== undefined) {
-            const note = baseNote + (currentOctaveRef.current - 4) * 12;
-            activeNotesRef.current.delete(note);
-            await synth.current?.stopNote(note);
+        if (activeNotesRef.current.has(key)) {
+            activeNotesRef.current.delete(key);
+            await synth.current?.stopNote(key);
         }
     };
 
