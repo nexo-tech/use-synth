@@ -19,29 +19,125 @@ export interface OscillatorConfig {
     detune?: number;
     phase?: number;
     level?: number;
-    unison?: { voices: number; spread: number; stereo?: number };
+    unison?: { voices: number; spread: number; detune?: number; stereo?: number };
     customWave?: Float32Array;
     envelope?: string; // ID of the envelope to use
 }
 
 class OscillatorEngineNodeInstance {
-    osc: OscillatorNode;
+    private context: AudioContext;
+    private config: OscillatorConfig;
+    private voices: {
+        osc: OscillatorNode;
+        panner: StereoPannerNode;
+        gain: GainNode;
+        delay: DelayNode;
+        phase: number;
+    }[] = [];
     adsrGain: GainNode;
     masterGain: GainNode;
-    isOscStartedPlaying = false;
 
-    constructor(context: AudioContext) {
-        console.log('[OscInstance] Creating new oscillator instance');
-        this.osc = context.createOscillator();
+    constructor(context: AudioContext, config: OscillatorConfig) {
+        console.log('[OscInstance] Creating new oscillator instance with config:', config);
+        this.context = context;
+        this.config = config;
+        
+        // Create ADSR and master gain nodes
         this.adsrGain = context.createGain();
         this.masterGain = context.createGain();
         this.adsrGain.connect(this.masterGain);
-        this.osc.connect(this.adsrGain);
-        console.log('[OscInstance] Created and connected nodes:', {
-            osc: this.osc,
-            adsrGain: this.adsrGain,
-            masterGain: this.masterGain,
+
+        // Create unison voices if configured
+        const voices = config.unison?.voices || 1;
+        const spread = config.unison?.spread || 0;
+        const detune = config.unison?.detune || 0;
+        const stereo = config.unison?.stereo || 0;
+        const phase = config.phase ?? 0;
+
+        console.log(`[OscInstance] Creating ${voices} unison voices`, {
+            spread,
+            detune,
+            stereo,
+            phase
         });
+
+        for (let i = 0; i < voices; i++) {
+            // Calculate voice position in the spread
+            const position = (i / (voices - 1)) * 2 - 1; // -1 to 1
+            const voiceDetune = position * spread + detune;
+            const pan = position * stereo;
+            
+            // Calculate random phase offset for this voice
+            const voicePhase = phase !== 0 
+                ? phase + (Math.random() * 0.1) // Add small random variation to specified phase
+                : Math.random() * 2 * Math.PI; // Completely random phase
+
+            // Create voice nodes
+            const osc = context.createOscillator();
+            const panner = context.createStereoPanner();
+            const gain = context.createGain();
+            const delay = context.createDelay();
+
+            // Configure voice
+            osc.type = config.type;
+            osc.detune.value = voiceDetune;
+            
+            // Connect with phase delay
+            osc.connect(delay);
+            delay.delayTime.value = voicePhase / (2 * Math.PI * osc.frequency.value);
+            delay.connect(panner);
+            panner.pan.value = pan;
+            panner.connect(gain);
+            gain.connect(this.adsrGain);
+
+            // Store voice with its phase
+            this.voices.push({ osc, panner, gain, delay, phase: voicePhase });
+
+            console.log(`[OscInstance] Created voice ${i}`, {
+                detune: voiceDetune,
+                pan,
+                phase: voicePhase,
+                delayTime: delay.delayTime.value,
+                osc,
+                panner,
+                gain
+            });
+        }
+    }
+
+    setFrequency(freq: number) {
+        console.log(`[OscInstance] Setting frequency to ${freq}Hz for all voices`);
+        this.voices.forEach(voice => {
+            voice.osc.frequency.value = freq;
+            // Update delay time to maintain phase relationship
+            voice.delay.delayTime.value = voice.phase / (2 * Math.PI * freq);
+        });
+    }
+
+    start() {
+        console.log('[OscInstance] Starting all voices');
+        this.voices.forEach(voice => {
+            voice.osc.start();
+        });
+    }
+
+    stop() {
+        console.log('[OscInstance] Stopping all voices');
+        this.voices.forEach(voice => {
+            voice.osc.stop();
+        });
+    }
+
+    disconnect() {
+        console.log('[OscInstance] Disconnecting all nodes');
+        this.voices.forEach(voice => {
+            voice.osc.disconnect();
+            voice.delay.disconnect();
+            voice.panner.disconnect();
+            voice.gain.disconnect();
+        });
+        this.adsrGain.disconnect();
+        this.masterGain.disconnect();
     }
 }
 
@@ -198,12 +294,10 @@ class OscillatorEngineNode implements AudioEngineNode {
 
     handleStartNode(note: number, velocity: number) {
         console.log(`[Osc ${this.id}] Starting note ${note} with velocity ${velocity}`);
-        const instance = new OscillatorEngineNodeInstance(this.engine.context);
-        instance.osc.type = this.config.type;
-        instance.osc.detune.value = this.config.detune ?? 0;
-
+        const instance = new OscillatorEngineNodeInstance(this.engine.context, this.config);
+        
         const freq = midiToFreq(note);
-        instance.osc.frequency.value = freq;
+        instance.setFrequency(freq);
         console.log(`[Osc ${this.id}] Set frequency to ${freq}Hz for note ${note}`);
 
         instance.masterGain.gain.value = velocity / 127;
@@ -213,10 +307,7 @@ class OscillatorEngineNode implements AudioEngineNode {
             this.envelope.handleStartNode(instance.adsrGain);
         }
 
-        instance.osc.start();
-        instance.isOscStartedPlaying = true;
-        console.log(`[Osc ${this.id}] Started oscillator`);
-
+        instance.start();
         this.instances.set(note, instance);
 
         // hook this voice into the master output
@@ -237,43 +328,20 @@ class OscillatorEngineNode implements AudioEngineNode {
             this.envelope.handleStopNode(instance.adsrGain);
         }
 
-        this.instances.delete(note);
-
-        if (this.envelope) {
-            if (this.envelope.config.release === 0) {
-                console.log(`[Osc ${this.id}] Immediate release`);
-                instance.osc.stop();
-                instance.adsrGain.disconnect();
-                instance.masterGain.disconnect();
-            } else {
-                console.log(`[Osc ${this.id}] Scheduling release after ${this.envelope.config.release}s`);
-                setTimeout(() => {
-                    instance.osc.stop();
-                    instance.adsrGain.disconnect();
-                    instance.masterGain.disconnect();
-                }, this.envelope.config.release * 1000);
-            }
+        const releaseTime = this.envelope?.config.release ?? 0;
+        if (releaseTime === 0) {
+            console.log(`[Osc ${this.id}] Immediate release`);
+            instance.stop();
+            instance.disconnect();
+            this.instances.delete(note);
+        } else {
+            console.log(`[Osc ${this.id}] Scheduling release after ${releaseTime}s`);
+            setTimeout(() => {
+                instance.stop();
+                instance.disconnect();
+                this.instances.delete(note);
+            }, releaseTime * 1000);
         }
-    }
-}
-
-class NoteStartEvent {
-    note: number;
-    velocity: number;
-    time: number;
-    constructor(note: number, velocity: number, time: number) {
-        this.note = note;
-        this.velocity = velocity;
-        this.time = time;
-    }
-}
-
-class NoteStopEvent {
-    note: number;
-    time: number;
-    constructor(note: number, time: number) {
-        this.note = note;
-        this.time = time;
     }
 }
 
