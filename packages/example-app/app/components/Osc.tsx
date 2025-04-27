@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Knob } from './Knob';
+import { OscillatorConfig } from '../aaa2/page';
 interface WaveformSelectorProps {
-    value: string;
-    onChange: (value: string) => void;
+    value: 'sine' | 'square' | 'sawtooth' | 'triangle';
+    onChange: (value: 'sine' | 'square' | 'sawtooth' | 'triangle') => void;
 }
 
 const WaveformSelector: React.FC<WaveformSelectorProps> = ({ value, onChange }) => {
@@ -24,7 +25,7 @@ const WaveformSelector: React.FC<WaveformSelectorProps> = ({ value, onChange }) 
                             ? 'bg-blue-600 text-white'
                             : 'bg-gray-700 hover:bg-gray-600 text-gray-200'
                             }`}
-                        onClick={() => onChange(waveform.id)}
+                        onClick={() => onChange(waveform.id as 'sine' | 'square' | 'sawtooth' | 'triangle')}
                     >
                         {waveform.label}
                         {value === waveform.id && (
@@ -38,45 +39,33 @@ const WaveformSelector: React.FC<WaveformSelectorProps> = ({ value, onChange }) 
 };
 
 interface OscProps {
-    config: {
-        type: string;
-        detune: number;
-        level: number;
-        unison?: {
-            voices: number;
-            spread: number;
-            stereo: number;
-        };
-    };
-    onConfigChange: (config: any) => void;
+    config: OscillatorConfig
+    onConfigChange: (config: Partial<OscillatorConfig>) => void;
 }
 
 export const Osc: React.FC<OscProps> = ({ config, onConfigChange }) => {
-    const handleWaveformChange = (type: string) => {
-        onConfigChange({ ...config, type });
+    const handleWaveformChange = (type: 'sine' | 'square' | 'sawtooth' | 'triangle') => {
+        onConfigChange({ type });
     };
 
     const handleDetuneChange = (detune: number) => {
-        onConfigChange({ ...config, detune });
+        onConfigChange({ detune });
     };
 
     const handleLevelChange = (level: number) => {
-        onConfigChange({ ...config, level });
+        onConfigChange({ level });
     };
 
     const handleUnisonVoicesChange = (voices: number) => {
-        const newUnison = { ...config.unison, voices };
-        onConfigChange({ ...config, unison: newUnison });
+        onConfigChange({ unisonVoices: voices });
     };
 
     const handleUnisonSpreadChange = (spread: number) => {
-        const newUnison = { ...config.unison, spread };
-        onConfigChange({ ...config, unison: newUnison });
+        onConfigChange({ unisonSpread: spread });
     };
 
     const handleUnisonStereoChange = (stereo: number) => {
-        const newUnison = { ...config.unison, stereo };
-        onConfigChange({ ...config, unison: newUnison });
+        onConfigChange({ unisonStereo: stereo });
     };
 
     return (
@@ -87,7 +76,7 @@ export const Osc: React.FC<OscProps> = ({ config, onConfigChange }) => {
                 <div className="flex justify-center gap-3 mt-2">
                     <Knob
                         label="Level"
-                        value={config.level}
+                        value={config.level ?? 0}
                         min={0}
                         max={1}
                         step={0.01}
@@ -97,7 +86,7 @@ export const Osc: React.FC<OscProps> = ({ config, onConfigChange }) => {
 
                     <Knob
                         label="Detune"
-                        value={config.detune}
+                        value={config.detune ?? 0}
                         min={-100}
                         max={100}
                         size="sm"
@@ -105,12 +94,12 @@ export const Osc: React.FC<OscProps> = ({ config, onConfigChange }) => {
                     />
                 </div>
 
-                {config.unison && (
+                {config.unisonVoices !== undefined && (
                     <div className="mt-2">
                         <div className="flex justify-center gap-2">
                             <Knob
                                 label="Voices"
-                                value={config.unison.voices}
+                                value={config.unisonVoices}
                                 min={1}
                                 max={16}
                                 size="sm"
@@ -119,7 +108,7 @@ export const Osc: React.FC<OscProps> = ({ config, onConfigChange }) => {
 
                             <Knob
                                 label="Spread"
-                                value={config.unison.spread}
+                                value={config.unisonSpread ?? 0}
                                 min={0}
                                 max={100}
                                 size="sm"
@@ -128,7 +117,7 @@ export const Osc: React.FC<OscProps> = ({ config, onConfigChange }) => {
 
                             <Knob
                                 label="Stereo"
-                                value={config.unison.stereo}
+                                value={config.unisonStereo ?? 0}
                                 min={0}
                                 max={100}
                                 size="sm"
