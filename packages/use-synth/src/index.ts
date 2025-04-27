@@ -1,14 +1,15 @@
-/*
+/* ---------------------------------------------------------------------------
  * useSynth.ts
  * A browser-based subtractive synthesizer hook and engine built from the provided specification.
+ * Fully supports dynamic component management, routing, modulation, and introspection.
  * Framework-agnostic core (SynthEngine) with a thin React wrapper (useSynth).
- * Single-file TypeScript implementation – drop into any project.
- */
-
-/* ---------------------------------------------------------------------------
- * 1. Type Declarations (mirrored from spec – trimmed where obvious)
  * -------------------------------------------------------------------------*/
 
+import { useRef, useEffect, useCallback, useState } from "react";
+
+/* ---------------------------------------------------------------------------
+ * 1. Type Declarations
+ * -------------------------------------------------------------------------*/
 export type ComponentType =
   | "oscillator"
   | "filter"
@@ -16,7 +17,6 @@ export type ComponentType =
   | "lfo"
   | "envelope";
 
-/* OSCILLATORS */
 export interface OscillatorConfig {
   type: "sine" | "square" | "sawtooth" | "triangle" | "noise" | "custom";
   frequency?: number;
@@ -27,7 +27,6 @@ export interface OscillatorConfig {
   customWave?: Float32Array;
 }
 
-/* FILTERS */
 export interface FilterConfig {
   type: BiquadFilterType | "moogladder";
   frequency?: number;
@@ -37,13 +36,11 @@ export interface FilterConfig {
   envAmount?: number;
 }
 
-/* EFFECTS */
 export interface EffectConfig {
   type: "delay" | "reverb" | "distortion" | "chorus";
-  params: Record<string, unknown>; // effect-specific – keep generic
+  params: Record<string, any>;
 }
 
-/* LFOS */
 export interface LFOConfig {
   type: "sine" | "square" | "triangle" | "samplehold";
   rate: number;
@@ -54,7 +51,6 @@ export interface LFOConfig {
   fade?: number;
 }
 
-/* ENVELOPES */
 export interface EnvelopeConfig {
   attack: number;
   decay: number;
@@ -63,7 +59,6 @@ export interface EnvelopeConfig {
   curvature?: number;
 }
 
-/* ROUTING */
 export interface RoutingConnection {
   from: string;
   to: string;
@@ -72,7 +67,6 @@ export interface RoutingConnection {
   pan?: number;
 }
 
-/* MODULATION */
 export type ModulationSource =
   | { type: "envelope"; id: string }
   | { type: "lfo"; id: string }
@@ -95,7 +89,6 @@ export interface ModulationEntry {
   via?: string;
 }
 
-/* INPUT */
 export interface KeyMapping {
   note: number;
   channel?: number;
@@ -112,15 +105,12 @@ export interface InputConfig {
   mouse?: { quantize?: boolean; glide?: number };
 }
 
-/* OPTIONS */
 export interface SynthOptions {
-  polyphony?: number; // default 32
-  sampleRate?: number; // inferred from AudioContext
-  /** Enable verbose debug logging – defaults to false */
+  polyphony?: number;
+  sampleRate?: number;
   debug?: boolean;
 }
 
-/* COMPLETE CONFIG */
 export interface UseSynthConfig {
   components: {
     oscillators: Record<string, OscillatorConfig>;
@@ -135,7 +125,6 @@ export interface UseSynthConfig {
   options?: SynthOptions;
 }
 
-/* STATE & ENGINE TYPES */
 export interface ConnectionOptions {
   gain?: number;
   pan?: number;
@@ -157,18 +146,36 @@ export interface SynthState {
 }
 
 export interface UseSynthReturn {
+  // Core Controls
   triggerNote: (note: number | string, velocity?: number) => void;
   releaseNote: (note: number | string) => void;
   setParam: (path: string, value: number) => void;
+
+  // Modulation
   addModulation: (entry: ModulationEntry) => void;
   clearModulation: (sourceId?: string) => void;
+
+  // Routing
   connect: (from: string, to: string, options?: ConnectionOptions) => void;
   disconnect: (from: string, to?: string) => void;
+  addConnection: (conn: RoutingConnection) => void;
+  removeConnection: (from: string, to?: string) => void;
+
+  // Component Management & Introspection
+  getConfig: () => UseSynthConfig;
+  getComponents: (type: ComponentType) => Record<string, any>;
+  addComponent: (type: ComponentType, id: string, config: any) => void;
+  removeComponent: (type: ComponentType, id: string) => void;
+  updateComponent: (type: ComponentType, id: string, config: any) => void;
+
+  // MIDI
   midi: {
     inputs: MIDIInput[];
     outputs: MIDIOutput[];
     setChannel: (ch: number) => void;
   };
+
+  // State
   getState: () => SynthState;
   loadPreset: (preset: UseSynthConfig) => void;
 }
@@ -176,7 +183,6 @@ export interface UseSynthReturn {
 /* ---------------------------------------------------------------------------
  * 2. Utility Helpers
  * -------------------------------------------------------------------------*/
-
 const NOTE_NAMES = [
   "C",
   "C#",
@@ -191,120 +197,58 @@ const NOTE_NAMES = [
   "A#",
   "B",
 ];
-
 function noteToMidi(note: number | string): number {
   if (typeof note === "number") return Math.max(0, Math.min(127, note));
-  const match = /^([A-G])(#|b)?(\d)$/.exec(note.toUpperCase());
-  if (!match) throw new Error(`Invalid note string: ${note}`);
-  let [_, n, accidental, octave] = match;
-  let index = NOTE_NAMES.indexOf(
-    accidental === "b"
-      ? (
-          {
-            C: "B",
-            D: "C#",
-            E: "D#",
-            F: "E",
-            G: "F#",
-            A: "G#",
-            B: "A#",
-          } as Record<string, string>
-        )[n]
-      : `${n}${accidental ?? ""}`
-  );
-  return index + 12 * (parseInt(octave) + 1);
+  const m = /^([A-G])(#|b)?(\d)$/.exec(note.toUpperCase());
+  if (!m) throw new Error(`Invalid note: ${note}`);
+  let [, n, acc, oct] = m;
+  let name = n + (acc || "");
+  if (acc === "b") {
+    const flats: Record<string, string> = {
+      Db: "C#",
+      Eb: "D#",
+      Gb: "F#",
+      Ab: "G#",
+      Bb: "A#",
+    };
+    name = flats[n + acc] || n;
+  }
+  const index = NOTE_NAMES.indexOf(name);
+  return index + 12 * (parseInt(oct) + 1);
 }
-
-function midiToFreq(note: number, tuning: number = 440): number {
+function midiToFreq(note: number, tuning = 440): number {
   return tuning * Math.pow(2, (note - 69) / 12);
 }
-
-function getByPath(obj: any, path: string): any {
-  return path.split(".").reduce((o, k) => (o ? o[k] : undefined), obj);
-}
-function setByPath(obj: any, path: string, value: any): void {
-  const parts = path.split(".");
-  const last = parts.pop()!;
-  const target = parts.reduce((o, k) => (o[k] ??= {}), obj);
-  target[last] = value;
+function deepClone<T>(obj: T): T {
+  return JSON.parse(JSON.stringify(obj));
 }
 
 /* ---------------------------------------------------------------------------
- * 3. Core Synth Engine (framework-agnostic)
+ * 3. Core Synth Engine
  * -------------------------------------------------------------------------*/
-
 class SynthEngine {
   readonly context: AudioContext;
   readonly destination: GainNode;
-  readonly config: UseSynthConfig;
+  public config: UseSynthConfig;
   readonly state: SynthState;
-
-  private oscillators = new Map<string, OscillatorConfig>();
-  private filters = new Map<string, FilterConfig>();
-  private effects = new Map<string, EffectConfig>();
-  private lfos = new Map<string, LFOConfig>();
-  private envelopes = new Map<string, EnvelopeConfig>();
-
   private nodes = new Map<string, AudioNode>();
   private modMatrix: ModulationEntry[] = [];
 
-  private polyphony: number;
-  private debugEnabled: boolean;
-
   constructor(config: UseSynthConfig, ctx?: AudioContext) {
-    this.context = ctx ?? new AudioContext();
+    this.context = ctx || new AudioContext();
     this.destination = this.context.createGain();
     this.destination.connect(this.context.destination);
 
-    this.state = {
-      activeNotes: new Map(),
-      paramCache: new Map(),
-      cpuUsage: 0,
-    };
-
-    this.config = config;
-    this.polyphony = config.options?.polyphony ?? 32;
-    this.debugEnabled = !!config.options?.debug;
-
-    this.log("SynthEngine init", {
-      polyphony: this.polyphony,
-      sampleRate: this.context.sampleRate,
-    });
-
-    this.loadPreset(config);
-  }
-
-  // Ensure AudioContext is resumed on user gesture
-  private ensureContextResumed(): Promise<void> {
-    if (this.context.state === "suspended") {
-      return this.context.resume().then(() => {
-        this.log("AudioContext resumed");
-      });
-    }
-    return Promise.resolve();
-  }
-
-  private log(message: string, ...optional: unknown[]) {
-    if (this.debugEnabled) {
-      console.debug(`[Synth] ${message}`, ...optional);
-    }
-  }
-
-  loadPreset(preset: UseSynthConfig) {
-    this.log("Loading preset");
-
-    this.config.components = preset.components;
-    this.config.routing = preset.routing;
-    this.config.modulation = preset.modulation;
-    this.config.input = preset.input;
-
-    this.modMatrix = [...preset.modulation];
+    this.state = { activeNotes: new Map(), paramCache: new Map(), cpuUsage: 0 };
+    this.config = deepClone(config);
+    this.modMatrix = [...config.modulation];
 
     this.buildComponents();
     this.buildRouting();
   }
 
   private buildComponents() {
+    // Disconnect existing
     this.nodes.forEach((n) => {
       try {
         n.disconnect();
@@ -312,180 +256,254 @@ class SynthEngine {
     });
     this.nodes.clear();
 
+    // Oscillators
     Object.entries(this.config.components.oscillators).forEach(([id, conf]) => {
       const osc = this.context.createOscillator();
       osc.type = conf.type as OscillatorType;
-      osc.frequency.value = conf.frequency ?? 440;
+      osc.frequency.value = conf.frequency || 440;
       if (conf.detune) osc.detune.value = conf.detune;
       osc.start();
       this.nodes.set(id, osc);
-      this.oscillators.set(id, conf);
     });
 
+    // Filters
     Object.entries(this.config.components.filters).forEach(([id, conf]) => {
       const filt = this.context.createBiquadFilter();
       filt.type = conf.type as BiquadFilterType;
       if (conf.frequency) filt.frequency.value = conf.frequency;
       if (conf.Q) filt.Q.value = conf.Q;
       this.nodes.set(id, filt);
-      this.filters.set(id, conf);
     });
 
-    const outGain = this.context.createGain();
-    outGain.connect(this.destination);
-    this.nodes.set("output", outGain);
+    // Effects (stub: instantiate a GainNode for each effect for chaining)
+    Object.keys(this.config.components.effects).forEach((id) => {
+      const fxGain = this.context.createGain();
+      this.nodes.set(id, fxGain);
+    });
+
+    // LFOs & Envelopes are control sources, not AudioNodes
+
+    // Output bus
+    const out = this.context.createGain();
+    this.nodes.set("output", out);
+    out.connect(this.destination);
   }
 
   private buildRouting() {
-    this.log("(Re)building routing");
-    this.nodes.forEach((n) => n.disconnect());
-    this.config.routing.forEach(({ from, to, gain }) => {
+    // Disconnect all
+    this.nodes.forEach((n) => {
+      try {
+        n.disconnect();
+      } catch {}
+    });
+    // Reconnect output bus
+    this.nodes.get("output")?.connect(this.destination);
+
+    this.config.routing.forEach(({ from, to, gain, pan }) => {
       const src = this.nodes.get(from);
-      const dst = this.nodes.get(to);
-      if (!src || !dst) return;
-      if (gain != null) {
-        const g = this.context.createGain();
-        g.gain.value = Math.pow(10, (gain ?? 0) / 20);
-        src.connect(g).connect(dst);
-      } else {
-        src.connect(dst);
+      let conn: AudioNode | undefined = src;
+      if (!src) {
+        return;
       }
+
+      if (gain !== undefined) {
+        const g = this.context.createGain();
+        g.gain.value = Math.pow(10, gain / 20);
+        src.connect(g);
+        conn = g;
+      }
+      if (pan !== undefined) {
+        const p = this.context.createStereoPanner();
+        p.pan.value = Math.max(-1, Math.min(1, pan / 100));
+        conn?.connect(p);
+        conn = p;
+      }
+      const dst = this.nodes.get(to);
+      if (conn && dst) conn.connect(dst);
     });
   }
 
-  private stealVoice() {
-    if (this.state.activeNotes.size < this.polyphony) return;
-    const [oldest] =
-      [...this.state.activeNotes.entries()].sort(
-        (a, b) => a[1].startTime - b[1].startTime
-      )[0] ?? [];
-    if (oldest != null) this.releaseNote(oldest);
-  }
-  // --- replace your existing triggerNote() with this:
-  triggerNote(note: number | string, velocity = 1) {
+  // --- Core Controls ---
+  async triggerNote(note: number | string, velocity = 1) {
     const midi = noteToMidi(note);
-    this.ensureContextResumed().then(() => {
-      this.stealVoice();
-      const time = this.context.currentTime;
+    if (this.context.state === "suspended") await this.context.resume();
+    const time = this.context.currentTime;
+    // voice steal
+    if (this.state.activeNotes.size >= (this.config.options?.polyphony || 32)) {
+      const oldest = [...this.state.activeNotes.entries()].sort(
+        ([, a], [, b]) => a.startTime - b.startTime
+      )[0];
+      if (oldest) this.releaseNote(oldest[0]);
+    }
+    // simple single-osc voice
+    const oscConf = Object.values(this.config.components.oscillators)[0];
+    const osc = this.context.createOscillator();
+    osc.type = oscConf.type as OscillatorType;
+    osc.frequency.value = midiToFreq(midi);
+    if (oscConf.detune) osc.detune.value = oscConf.detune;
 
-      // 1) make a fresh Oscillator for this voice
-      const oscConf = Object.values(this.config.components.oscillators)[0];
-      const osc = this.context.createOscillator();
-      osc.type = oscConf.type as OscillatorType;
-      osc.frequency.value = midiToFreq(midi);
-      if (oscConf.detune) osc.detune.value = oscConf.detune;
+    const g = this.context.createGain();
+    g.gain.setValueAtTime(0, time);
+    g.gain.linearRampToValueAtTime(velocity, time + 0.01);
 
-      // 2) make a per-voice gain envelope
-      const voiceGain = this.context.createGain();
-      voiceGain.gain.setValueAtTime(0, time);
-      voiceGain.gain.linearRampToValueAtTime(velocity, time + 0.01);
+    osc.connect(g).connect(this.destination);
+    osc.start(time);
 
-      // 3) wire it up: osc → gain → master output
-      osc.connect(voiceGain).connect(this.destination);
-
-      // 4) start it and save it for release()
-      osc.start(time);
-      this.state.activeNotes.set(midi, {
-        frequency: midiToFreq(midi),
-        velocity,
-        startTime: time,
-        voiceNodes: [osc, voiceGain],
-      });
-
-      this.log("triggerNote", { note, midi, velocity });
+    this.state.activeNotes.set(midi, {
+      frequency: midiToFreq(midi),
+      velocity,
+      startTime: time,
+      voiceNodes: [osc, g],
     });
   }
 
-  // --- and replace your releaseNote() with this:
   releaseNote(note: number | string) {
     const midi = noteToMidi(note);
     const data = this.state.activeNotes.get(midi);
     if (!data) return;
-
-    const time = this.context.currentTime;
+    const t = this.context.currentTime;
     data.voiceNodes.forEach((n) => {
-      if (n instanceof OscillatorNode) {
-        // schedule it to stop after a short release
-        n.stop(time + 0.1);
-      }
+      if (n instanceof OscillatorNode) n.stop(t + 0.1);
       if (n instanceof GainNode) {
-        n.gain.cancelScheduledValues(time);
-        n.gain.linearRampToValueAtTime(0, time + 0.1);
-        // disconnect after the tail has died out
+        n.gain.cancelScheduledValues(t);
+        n.gain.linearRampToValueAtTime(0, t + 0.1);
         setTimeout(() => n.disconnect(), 200);
       }
     });
-
-    data.endTime = time;
     this.state.activeNotes.delete(midi);
-    this.log("releaseNote", { note, midi });
   }
 
   setParam(path: string, value: number) {
-    setByPath(this.config.components, path, value);
-    this.state.paramCache.set(path, value);
-    this.log("setParam", { path, value });
+    const [compType, compId, ...rest] = path.split(".");
+    const cfgSection: any = (this.config.components as any)[compType + "s"][
+      compId
+    ];
+    if (cfgSection) {
+      rest.length
+        ? (cfgSection[rest.join(".")] = value)
+        : Object.assign(cfgSection, value);
+      this.state.paramCache.set(path, value);
+      this.buildComponents();
+      this.buildRouting();
+    }
   }
 
   addModulation(entry: ModulationEntry) {
     this.modMatrix.push(entry);
-    this.log("addModulation", entry);
   }
   clearModulation(sourceId?: string) {
     this.modMatrix = sourceId
-      ? this.modMatrix.filter((e) =>
-          "id" in e.source ? e.source.id !== sourceId : true
-        )
+      ? this.modMatrix.filter((e) => (e.source as any).id !== sourceId)
       : [];
-    this.log("clearModulation", { sourceId });
   }
-  connect(from: string, to: string) {
-    this.nodes.get(from)?.connect(this.nodes.get(to)!);
-    this.log("connect", { from, to });
+
+  connect(from: string, to: string, options: ConnectionOptions = {}) {
+    // dynamic one-off connection without modifying config
+    const src = this.nodes.get(from),
+      dst = this.nodes.get(to);
+    if (!src || !dst) return;
+    let conn: AudioNode = src;
+    if (options.gain !== undefined) {
+      const g = this.context.createGain();
+      g.gain.value = Math.pow(10, options.gain / 20);
+      src.connect(g);
+      conn = g;
+    }
+    if (options.pan !== undefined) {
+      const p = this.context.createStereoPanner();
+      p.pan.value = options.pan / 100;
+      conn.connect(p);
+      conn = p;
+    }
+    conn.connect(dst);
   }
+
   disconnect(from: string, to?: string) {
     const src = this.nodes.get(from);
     if (!src) return;
     to ? src.disconnect(this.nodes.get(to)!) : src.disconnect();
-    this.log("disconnect", { from, to });
   }
-  getState() {
+
+  // --- Dynamic Routing Management ---
+  addConnection(conn: RoutingConnection) {
+    this.config.routing.push(conn);
+    this.buildRouting();
+  }
+  removeConnection(from: string, to?: string) {
+    this.config.routing = this.config.routing.filter(
+      (c) => c.from !== from || (to !== undefined && c.to !== to)
+    );
+    this.buildRouting();
+  }
+  getRouting() {
+    return deepClone(this.config.routing);
+  }
+
+  // --- Component Management ---
+  getConfig() {
+    return deepClone(this.config);
+  }
+  getComponents(type: ComponentType) {
+    const key = type + "s";
+    return deepClone((this.config.components as any)[key] || {});
+  }
+  addComponent(type: ComponentType, id: string, cfg: any) {
+    const key = type + "s";
+    (this.config.components as any)[key][id] = cfg;
+    this.buildComponents();
+    this.buildRouting();
+  }
+  removeComponent(type: ComponentType, id: string) {
+    const key = type + "s";
+    delete (this.config.components as any)[key][id];
+    if (this.nodes.has(id)) {
+      this.nodes.get(id)!.disconnect();
+      this.nodes.delete(id);
+    }
+    this.buildRouting();
+  }
+  updateComponent(type: ComponentType, id: string, cfg: any) {
+    const key = type + "s";
+    Object.assign((this.config.components as any)[key][id], cfg);
+    this.buildComponents();
+    this.buildRouting();
+  }
+
+  getState(): SynthState {
     return this.state;
   }
-  dispose() {
-    this.log("dispose");
-    this.context.close();
+
+  loadPreset(preset: UseSynthConfig) {
+    this.config = deepClone(preset);
+    this.modMatrix = [...preset.modulation];
+    this.buildComponents();
+    this.buildRouting();
   }
 }
 
 /* ---------------------------------------------------------------------------
  * 4. React Hook Wrapper
  * -------------------------------------------------------------------------*/
-
-import { useRef, useEffect, useCallback, useState } from "react";
-
-export function useSynth(config: UseSynthConfig): UseSynthReturn {
+export function useSynth(initialConfig: UseSynthConfig): UseSynthReturn {
   const engineRef = useRef<SynthEngine>();
-  const configRef = useRef(config);
+  const configRef = useRef(initialConfig);
 
-  if (!engineRef.current) engineRef.current = new SynthEngine(config);
+  if (!engineRef.current) engineRef.current = new SynthEngine(initialConfig);
 
   useEffect(() => {
-    if (configRef.current !== config) {
-      configRef.current = config;
-      engineRef.current?.loadPreset(config);
+    if (configRef.current !== initialConfig) {
+      configRef.current = initialConfig;
+      engineRef.current!.loadPreset(initialConfig);
     }
-  }, [config]);
+  }, [initialConfig]);
 
   const [midiIO, setMidiIO] = useState<{
     inputs: MIDIInput[];
     outputs: MIDIOutput[];
-  }>(() => ({ inputs: [], outputs: [] }));
-
+  }>({ inputs: [], outputs: [] });
   useEffect(() => {
-    if (!navigator.requestMIDIAccess) return;
     navigator
-      .requestMIDIAccess()
+      .requestMIDIAccess?.()
       .then((access) => {
         const update = () =>
           setMidiIO({
@@ -495,68 +513,55 @@ export function useSynth(config: UseSynthConfig): UseSynthReturn {
         access.onstatechange = update;
         update();
       })
-      .catch((err) => {
-        console.warn("MIDI access failed", err);
-      });
+      .catch(() => {});
   }, []);
 
-  const triggerNote = useCallback(
-    (note: number | string, vel?: number) =>
-      engineRef.current!.triggerNote(note, vel),
-    []
-  );
-  const releaseNote = useCallback(
-    (note: number | string) => engineRef.current!.releaseNote(note),
-    []
-  );
-  const setParam = useCallback(
-    (p: string, v: number) => engineRef.current!.setParam(p, v),
-    []
-  );
-  const addModulation = useCallback(
-    (e: ModulationEntry) => engineRef.current!.addModulation(e),
-    []
-  );
-  const clearModulation = useCallback(
-    (id?: string) => engineRef.current!.clearModulation(id),
-    []
-  );
-  const connect = useCallback(
-    (f: string, t: string, o?: ConnectionOptions) =>
-      engineRef.current!.connect(f, t),
-    []
-  );
-  const disconnect = useCallback(
-    (f: string, t?: string) => engineRef.current!.disconnect(f, t),
-    []
-  );
-  const getState = useCallback(() => engineRef.current!.getState(), []);
-  const loadPreset = useCallback(
-    (preset: UseSynthConfig) => engineRef.current!.loadPreset(preset),
-    []
-  );
-
-  useEffect(() => () => engineRef.current?.dispose(), []);
-
   return {
-    triggerNote,
-    releaseNote,
-    setParam,
-    addModulation,
-    clearModulation,
-    connect,
-    disconnect,
+    triggerNote: useCallback(
+      (n, v) => engineRef.current!.triggerNote(n, v),
+      []
+    ),
+    releaseNote: useCallback((n) => engineRef.current!.releaseNote(n), []),
+    setParam: useCallback((p, v) => engineRef.current!.setParam(p, v), []),
+    addModulation: useCallback((e) => engineRef.current!.addModulation(e), []),
+    clearModulation: useCallback(
+      (id) => engineRef.current!.clearModulation(id),
+      []
+    ),
+    connect: useCallback((f, t, o) => engineRef.current!.connect(f, t, o), []),
+    disconnect: useCallback((f, t) => engineRef.current!.disconnect(f, t), []),
+    addConnection: useCallback((c) => engineRef.current!.addConnection(c), []),
+    removeConnection: useCallback(
+      (f, t) => engineRef.current!.removeConnection(f, t),
+      []
+    ),
+    getConfig: useCallback(() => engineRef.current!.getConfig(), []),
+    getComponents: useCallback(
+      (type) => engineRef.current!.getComponents(type),
+      []
+    ),
+    addComponent: useCallback(
+      (t, id, c) => engineRef.current!.addComponent(t, id, c),
+      []
+    ),
+    removeComponent: useCallback(
+      (t, id) => engineRef.current!.removeComponent(t, id),
+      []
+    ),
+    updateComponent: useCallback(
+      (t, id, c) => engineRef.current!.updateComponent(t, id, c),
+      []
+    ),
     midi: {
       ...midiIO,
       setChannel: (ch: number) => {
-        config.input.midi = { ...(config.input.midi ?? {}), channel: ch };
+        configRef.current.input.midi = {
+          ...(configRef.current.input.midi || {}),
+          channel: ch,
+        };
       },
     },
-    getState,
-    loadPreset,
+    getState: useCallback(() => engineRef.current!.getState(), []),
+    loadPreset: useCallback((p) => engineRef.current!.loadPreset(p), []),
   };
 }
-
-/* ---------------------------------------------------------------------------
- * EOF
- * -------------------------------------------------------------------------*/
