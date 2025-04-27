@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { SynthPad } from './components/SynthContainer';
+import { SynthPath as SynthPad } from './components/SynthContainer';
 // import './globals.css';
 
 export default function Home() {

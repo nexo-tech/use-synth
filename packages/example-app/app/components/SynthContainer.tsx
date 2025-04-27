@@ -3,7 +3,7 @@ import { useSynth, UseSynthConfig } from "use-synth";
 
 /*
  * A minimal demo component that wires the `useSynth` hook to a simple
- * on-screen keyboard and basic computer-keyboard mapping.
+ * on‑screen keyboard and basic computer‑keyboard mapping.
  * Feel free to style / expand – this is just a quick starting point.
  */
 
@@ -26,6 +26,9 @@ const KEYBOARD_MAP: Record<string, { note: number }> = {
 
 // --- Static preset config (saw pad) ---
 const PRESET: UseSynthConfig = {
+  options: {
+    debug: true,
+  },
   components: {
     oscillators: {
       main: {
@@ -69,11 +72,8 @@ const PRESET: UseSynthConfig = {
   },
 };
 
-export const SynthPad: React.FC = () => {
+export const SynthPath: React.FC = () => {
   const synth = useSynth(PRESET);
-
-  //@ts-ignore
-  window.getState = synth.getState;
 
   /* ------------------------------------------------------
    * Computer keyboard handling
@@ -107,7 +107,7 @@ export const SynthPad: React.FC = () => {
   }, [handleDown, handleUp]);
 
   /* ------------------------------------------------------
-   * Simple on-screen button keyboard (click / touch)
+   * Simple on‑screen button keyboard (click / touch)
    * ----------------------------------------------------*/
   const renderKeys = () =>
     Object.entries(KEYBOARD_MAP).map(([code, { note }]) => (
@@ -127,7 +127,7 @@ export const SynthPad: React.FC = () => {
       <h2 className="text-xl font-semibold">SynthPath Demo</h2>
       <div className="flex">{renderKeys()}</div>
       <p className="text-xs opacity-70">
-        Play with A-K keys or click the buttons.
+        Play with A‑K keys or click the buttons.
       </p>
     </div>
   );
