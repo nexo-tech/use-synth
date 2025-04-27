@@ -314,6 +314,7 @@ class Engine2 {
     _context: AudioContext;
     components: Map<string, AudioEngineNode> = new Map();
     private masterGain: MasterGain;
+    private isResuming: boolean = false;
 
     constructor() {
         this._context = new AudioContext();
@@ -323,6 +324,63 @@ class Engine2 {
 
     get context() {
         return this._context;
+    }
+
+    async ensureAudioContextActive(): Promise<boolean> {
+        if (this._context.state === 'suspended') {
+            if (this.isResuming) {
+                console.log('[Engine] AudioContext is already resuming, waiting...');
+                // Wait for the current resume operation to complete
+                while (this._context.state === 'suspended') {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+                return true;
+            }
+
+            this.isResuming = true;
+            try {
+                console.log('[Engine] Resuming AudioContext...');
+                await this._context.resume();
+                console.log('[Engine] AudioContext resumed successfully');
+                return true;
+            } catch (error) {
+                console.error('[Engine] Failed to resume AudioContext:', error);
+                return false;
+            } finally {
+                this.isResuming = false;
+            }
+        }
+        return true;
+    }
+
+    async playNote(note = 60, velocity = 127) {
+        const isActive = await this.ensureAudioContextActive();
+        if (!isActive) {
+            console.warn('[Engine] Cannot play note - AudioContext is not active');
+            return;
+        }
+
+        console.log('[Engine] Playing note:', { note, velocity });
+        this.components.forEach((component) => {
+            if (component.type === 'oscillator') {
+                (component as OscillatorEngineNode).handleStartNode(note, velocity);
+            }
+        });
+    }
+
+    async stopNote(note = 60) {
+        const isActive = await this.ensureAudioContextActive();
+        if (!isActive) {
+            console.warn('[Engine] Cannot stop note - AudioContext is not active');
+            return;
+        }
+
+        console.log('[Engine] Stopping note:', note);
+        this.components.forEach((component) => {
+            if (component.type === 'oscillator') {
+                (component as OscillatorEngineNode).handleStopNode(note);
+            }
+        });
     }
 
     createFromConfig(config: UseSynthConfig) {
@@ -373,24 +431,6 @@ class Engine2 {
             }
         });
     }
-
-    playNote(note = 60, velocity = 127) {
-        console.log('[Engine] Playing note:', { note, velocity });
-        this.components.forEach((component) => {
-            if (component.type === 'oscillator') {
-                (component as OscillatorEngineNode).handleStartNode(note, velocity);
-            }
-        });
-    }
-
-    stopNote(note = 60) {
-        console.log('[Engine] Stopping note:', note);
-        this.components.forEach((component) => {
-            if (component.type === 'oscillator') {
-                (component as OscillatorEngineNode).handleStopNode(note);
-            }
-        });
-    }
 }
 
 const baseConfig: UseSynthConfig = {
@@ -424,24 +464,34 @@ const baseConfig: UseSynthConfig = {
 };
 
 export default function OscillatorPage() {
+    const [synth, setSynth] = React.useState<Engine2 | null>(null);
+
+    React.useEffect(() => {
+        // Initialize synth on component mount
+        const newSynth = new Engine2();
+        setSynth(newSynth);
+        newSynth.createFromConfig(baseConfig);
+
+        return () => {
+            // Cleanup on unmount
+            if (newSynth.context.state !== 'closed') {
+                newSynth.context.close();
+            }
+        };
+    }, []);
+
     return (
         <main className="flex min-h-screen flex-col items-center justify-center p-8 bg-gray-950 text-white">
             <button
-                onClick={async () => {
-                    console.log('[UI] Button clicked, creating synth');
-                    const synth = new Engine2();
-                    // resume audio context on first user interaction
-                    if (synth.context.state === 'suspended') {
-                        try {
-                            await synth.context.resume();
-                            console.log('[UI] AudioContext resumed');
-                        } catch (e) {
-                            console.warn('[UI] Resume failed', e);
-                        }
-                    }
-                    synth.createFromConfig(baseConfig);
+                onMouseDown={async () => {
+                    if (!synth) return;
                     console.log('[UI] Playing note');
-                    synth.playNote();
+                    await synth.playNote();
+                }}
+                onMouseUp={async () => {
+                    if (!synth) return;
+                    console.log('[UI] Stopping note');
+                    await synth.stopNote();
                 }}
             >
                 Play C4
