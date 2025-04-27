@@ -58,8 +58,8 @@ class ADSREnvelope implements EngineNode {
     id: string;
     config: EnvelopeConfig;
     engine: Engine2
-    constructor(engine: Engine2, config: EnvelopeConfig) {
-        this.id = this.type.substring(0, 3) + ADSREnvelope.nextID++;
+    constructor(engine: Engine2, config: EnvelopeConfig, id?: string) {
+        this.id = id || this.type.substring(0, 3) + ADSREnvelope.nextID++;
         this.config = config;
         this.engine = engine;
     }
@@ -110,10 +110,10 @@ class MasterGain implements AudioEngineNode {
         audioNode.connect(this.gain);
         this.gain.connect(this.engine.context.destination);
     }
-    constructor(engine: Engine2) {
+    constructor(engine: Engine2, id?: string) {
         this.engine = engine;
         this.gain = this.engine.context.createGain();
-        this.id = this.type.substring(0, 3) + MasterGain.nextID++;
+        this.id = id || this.type.substring(0, 3) + MasterGain.nextID++;
     }
     static nextID = 0;
 }
@@ -140,9 +140,9 @@ class FilterEngineNode implements AudioEngineNode {
             node.handleInputAudio(audioNode);
         });
     }
-    constructor(engine: Engine2, config: FilterConfig) {
+    constructor(engine: Engine2, config: FilterConfig, id?: string) {
         this.engine = engine;
-        this.id = this.type.substring(0, 3) + FilterEngineNode.nextID++;
+        this.id = id || this.type.substring(0, 3) + FilterEngineNode.nextID++;
         this.config = config;
         this.filter = this.engine.context.createBiquadFilter();
     }
@@ -163,9 +163,9 @@ class OscillatorEngineNode implements AudioEngineNode {
     }
 
     static nextID = 0;
-    constructor(engine: Engine2, config: OscillatorConfig) {
+    constructor(engine: Engine2, config: OscillatorConfig, id?: string) {
         this.engine = engine;
-        this.id = this.type.substring(0, 3) + OscillatorEngineNode.nextID++;
+        this.id = id || this.type.substring(0, 3) + OscillatorEngineNode.nextID++;
         this.config = config;
     }
 
