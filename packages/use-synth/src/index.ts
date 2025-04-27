@@ -2,6 +2,7 @@
  * useSynth.ts
  * A browser-based subtractive synthesizer hook and engine built from the provided specification.
  * Fully supports dynamic component management, routing, modulation, and introspection.
+ * Fixed: no static oscillator playback on load; oscillators are created per voice only.
  * Framework-agnostic core (SynthEngine) with a thin React wrapper (useSynth).
  * -------------------------------------------------------------------------*/
 
@@ -248,23 +249,13 @@ class SynthEngine {
   }
 
   private buildComponents() {
-    // Disconnect existing
+    // Clear existing nodes
     this.nodes.forEach((n) => {
       try {
         n.disconnect();
       } catch {}
     });
     this.nodes.clear();
-
-    // Oscillators
-    Object.entries(this.config.components.oscillators).forEach(([id, conf]) => {
-      const osc = this.context.createOscillator();
-      osc.type = conf.type as OscillatorType;
-      osc.frequency.value = conf.frequency || 440;
-      if (conf.detune) osc.detune.value = conf.detune;
-      osc.start();
-      this.nodes.set(id, osc);
-    });
 
     // Filters
     Object.entries(this.config.components.filters).forEach(([id, conf]) => {
@@ -275,13 +266,11 @@ class SynthEngine {
       this.nodes.set(id, filt);
     });
 
-    // Effects (stub: instantiate a GainNode for each effect for chaining)
+    // Effects (placeholder: using GainNodes for effect inserts)
     Object.keys(this.config.components.effects).forEach((id) => {
-      const fxGain = this.context.createGain();
-      this.nodes.set(id, fxGain);
+      const fxNode = this.context.createGain();
+      this.nodes.set(id, fxNode);
     });
-
-    // LFOs & Envelopes are control sources, not AudioNodes
 
     // Output bus
     const out = this.context.createGain();
@@ -290,70 +279,109 @@ class SynthEngine {
   }
 
   private buildRouting() {
-    // Disconnect all
+    // Disconnect all existing
     this.nodes.forEach((n) => {
       try {
         n.disconnect();
       } catch {}
     });
-    // Reconnect output bus
+    // Reconnect output to destination
     this.nodes.get("output")?.connect(this.destination);
 
     this.config.routing.forEach(({ from, to, gain, pan }) => {
+      // Skip static oscillator routing
+      if (from in this.config.components.oscillators) return;
       const src = this.nodes.get(from);
-      let conn: AudioNode | undefined = src;
-      if (!src) {
-        return;
-      }
+      if (!src) return;
+      let conn: AudioNode = src;
 
       if (gain !== undefined) {
         const g = this.context.createGain();
         g.gain.value = Math.pow(10, gain / 20);
-        src.connect(g);
+        conn.connect(g);
         conn = g;
       }
       if (pan !== undefined) {
         const p = this.context.createStereoPanner();
         p.pan.value = Math.max(-1, Math.min(1, pan / 100));
-        conn?.connect(p);
+        conn.connect(p);
         conn = p;
       }
       const dst = this.nodes.get(to);
-      if (conn && dst) conn.connect(dst);
+      if (dst) conn.connect(dst);
     });
   }
 
-  // --- Core Controls ---
+  /* Core Controls & Voice Management */
   async triggerNote(note: number | string, velocity = 1) {
     const midi = noteToMidi(note);
     if (this.context.state === "suspended") await this.context.resume();
     const time = this.context.currentTime;
-    // voice steal
-    if (this.state.activeNotes.size >= (this.config.options?.polyphony || 32)) {
+
+    // Voice steal
+    const maxVoices = this.config.options?.polyphony || 32;
+    if (this.state.activeNotes.size >= maxVoices) {
       const oldest = [...this.state.activeNotes.entries()].sort(
         ([, a], [, b]) => a.startTime - b.startTime
       )[0];
       if (oldest) this.releaseNote(oldest[0]);
     }
-    // simple single-osc voice
-    const oscConf = Object.values(this.config.components.oscillators)[0];
-    const osc = this.context.createOscillator();
-    osc.type = oscConf.type as OscillatorType;
-    osc.frequency.value = midiToFreq(midi);
-    if (oscConf.detune) osc.detune.value = oscConf.detune;
 
-    const g = this.context.createGain();
-    g.gain.setValueAtTime(0, time);
-    g.gain.linearRampToValueAtTime(velocity, time + 0.01);
+    // Create per-oscillator voices
+    const voiceNodes: AudioNode[] = [];
+    Object.entries(this.config.components.oscillators).forEach(
+      ([oscId, oscConf]) => {
+        const osc = this.context.createOscillator();
+        osc.type = oscConf.type as OscillatorType;
+        osc.frequency.value = oscConf.frequency
+          ? midiToFreq(midi)
+          : midiToFreq(midi);
+        if (oscConf.detune) osc.detune.value = oscConf.detune;
 
-    osc.connect(g).connect(this.destination);
-    osc.start(time);
+        const gainNode = this.context.createGain();
+        gainNode.gain.setValueAtTime(0, time);
+        gainNode.gain.linearRampToValueAtTime(
+          velocity * (oscConf.level ?? 1),
+          time + 0.01
+        );
+
+        // Connect oscillator through gain into filter/effect graph
+        // Find routing entries where from === oscId
+        const routes = this.config.routing.filter((r) => r.from === oscId);
+        if (routes.length) {
+          routes.forEach((r) => {
+            let conn: AudioNode = gainNode;
+            if (r.gain !== undefined) {
+              const g = this.context.createGain();
+              g.gain.value = Math.pow(10, r.gain / 20);
+              gainNode.connect(g);
+              conn = g;
+            }
+            if (r.pan !== undefined) {
+              const p = this.context.createStereoPanner();
+              p.pan.value = r.pan / 100;
+              conn.connect(p);
+              conn = p;
+            }
+            const dst = this.nodes.get(r.to);
+            if (dst) conn.connect(dst);
+          });
+        } else {
+          // Default direct to output
+          gainNode.connect(this.nodes.get("output")!);
+        }
+
+        osc.connect(gainNode);
+        osc.start(time);
+        voiceNodes.push(osc, gainNode);
+      }
+    );
 
     this.state.activeNotes.set(midi, {
       frequency: midiToFreq(midi),
       velocity,
       startTime: time,
-      voiceNodes: [osc, g],
+      voiceNodes,
     });
   }
 
@@ -375,19 +403,17 @@ class SynthEngine {
 
   setParam(path: string, value: number) {
     const [compType, compId, ...rest] = path.split(".");
-    const cfgSection: any = (this.config.components as any)[compType + "s"][
-      compId
-    ];
-    if (cfgSection) {
-      rest.length
-        ? (cfgSection[rest.join(".")] = value)
-        : Object.assign(cfgSection, value);
+    const section = (this.config.components as any)[compType + "s"][compId];
+    if (section) {
+      if (rest.length) section[rest.join(".")] = value;
+      else Object.assign(section, value);
       this.state.paramCache.set(path, value);
       this.buildComponents();
       this.buildRouting();
     }
   }
 
+  /* Modulation */
   addModulation(entry: ModulationEntry) {
     this.modMatrix.push(entry);
   }
@@ -397,8 +423,8 @@ class SynthEngine {
       : [];
   }
 
+  /* Dynamic Connect/Disconnect */
   connect(from: string, to: string, options: ConnectionOptions = {}) {
-    // dynamic one-off connection without modifying config
     const src = this.nodes.get(from),
       dst = this.nodes.get(to);
     if (!src || !dst) return;
@@ -406,7 +432,7 @@ class SynthEngine {
     if (options.gain !== undefined) {
       const g = this.context.createGain();
       g.gain.value = Math.pow(10, options.gain / 20);
-      src.connect(g);
+      conn.connect(g);
       conn = g;
     }
     if (options.pan !== undefined) {
@@ -417,14 +443,13 @@ class SynthEngine {
     }
     conn.connect(dst);
   }
-
   disconnect(from: string, to?: string) {
     const src = this.nodes.get(from);
     if (!src) return;
     to ? src.disconnect(this.nodes.get(to)!) : src.disconnect();
   }
 
-  // --- Dynamic Routing Management ---
+  /* Routing Management */
   addConnection(conn: RoutingConnection) {
     this.config.routing.push(conn);
     this.buildRouting();
@@ -435,27 +460,21 @@ class SynthEngine {
     );
     this.buildRouting();
   }
-  getRouting() {
-    return deepClone(this.config.routing);
-  }
 
-  // --- Component Management ---
+  /* Component Management */
   getConfig() {
     return deepClone(this.config);
   }
   getComponents(type: ComponentType) {
-    const key = type + "s";
-    return deepClone((this.config.components as any)[key] || {});
+    return deepClone((this.config.components as any)[type + "s"] || {});
   }
   addComponent(type: ComponentType, id: string, cfg: any) {
-    const key = type + "s";
-    (this.config.components as any)[key][id] = cfg;
+    (this.config.components as any)[type + "s"][id] = cfg;
     this.buildComponents();
     this.buildRouting();
   }
   removeComponent(type: ComponentType, id: string) {
-    const key = type + "s";
-    delete (this.config.components as any)[key][id];
+    delete (this.config.components as any)[type + "s"][id];
     if (this.nodes.has(id)) {
       this.nodes.get(id)!.disconnect();
       this.nodes.delete(id);
@@ -463,8 +482,7 @@ class SynthEngine {
     this.buildRouting();
   }
   updateComponent(type: ComponentType, id: string, cfg: any) {
-    const key = type + "s";
-    Object.assign((this.config.components as any)[key][id], cfg);
+    Object.assign((this.config.components as any)[type + "s"][id], cfg);
     this.buildComponents();
     this.buildRouting();
   }

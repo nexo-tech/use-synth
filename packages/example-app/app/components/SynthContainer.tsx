@@ -26,23 +26,21 @@ const KEYBOARD_MAP: Record<string, { note: number }> = {
 
 // --- Static preset config (saw pad) ---
 const PRESET: UseSynthConfig = {
-  options: {
-    debug: true,
-  },
   components: {
     oscillators: {
       main: {
         type: "sawtooth",
         detune: -7,
+        level: 0.5,
         unison: { voices: 5, spread: 25, stereo: 50 },
       },
     },
     filters: {
       lpf: {
         type: "lowpass",
-        frequency: 1600,
+        frequency: 400,
         Q: 0.9,
-        envAmount: 0.4,
+        envAmount: 1,
       },
     },
     effects: {},
@@ -50,7 +48,7 @@ const PRESET: UseSynthConfig = {
       vibrato: { type: "sine", rate: 5, sync: false },
     },
     envelopes: {
-      amp: { attack: 0.05, decay: 0.2, sustain: 0.8, release: 0.4 },
+      amp: { attack: 0.05, decay: 0.2, sustain: 1.0, release: 0.4 },
     },
   },
   routing: [
