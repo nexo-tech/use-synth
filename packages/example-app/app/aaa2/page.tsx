@@ -672,33 +672,102 @@ const baseConfig: UseSynthConfig = {
 };
 
 export default function OscillatorPage() {
-    const [synth, setSynth] = React.useState<Engine2 | null>(null);
+    const synth = React.useRef<Engine2 | null>(null);
     const [currentConfig, setCurrentConfig] = React.useState<UseSynthConfig | null>(null);
+    const [currentOctave, setCurrentOctave] = React.useState(4); // Middle C is C4
+    const activeNotesRef = React.useRef<Set<number>>(new Set());
+    const currentOctaveRef = React.useRef(4);
+    // Map keyboard keys to MIDI notes
+    const keyToNote: Record<string, number> = {
+        'a': 60, // C4
+        'w': 61, // C#4
+        's': 62, // D4
+        'e': 63, // D#4
+        'd': 64, // E4
+        'f': 65, // F4
+        't': 66, // F#4
+        'g': 67, // G4
+        'y': 68, // G#4
+        'h': 69, // A4
+        'u': 70, // A#4
+        'j': 71, // B4
+        'k': 72, // C5
+    };
+
+    // Handle octave changes
+    const handleOctaveChange = (delta: number) => {
+        const newOctave = Math.max(0, Math.min(8, currentOctaveRef.current + delta));
+        currentOctaveRef.current = newOctave;
+        setCurrentOctave(newOctave);
+    };
+
+    // Handle note playing
+    const handleKeyDown = async (e: KeyboardEvent) => {
+        if (!synth.current) return;
+
+        const key = e.key.toLowerCase();
+
+        // Handle octave changes
+        if (key === 'z') {
+            handleOctaveChange(-1);
+            return;
+        }
+        if (key === 'x') {
+            handleOctaveChange(1);
+            return;
+        }
+
+        // Handle note playing
+        const baseNote = keyToNote[key];
+        if (baseNote !== undefined && !activeNotesRef.current.has(baseNote)) {
+            const note = baseNote + (currentOctaveRef.current - 4) * 12;
+            activeNotesRef.current.add(note);
+            await synth.current?.playNote(note);
+        }
+    };
+
+    const handleKeyUp = async (e: KeyboardEvent) => {
+        if (!synth.current) return;
+
+        const key = e.key.toLowerCase();
+        const baseNote = keyToNote[key];
+        if (baseNote !== undefined) {
+            const note = baseNote + (currentOctaveRef.current - 4) * 12;
+            activeNotesRef.current.delete(note);
+            await synth.current?.stopNote(note);
+        }
+    };
 
     React.useEffect(() => {
         // Initialize synth on component mount
         const newSynth = new Engine2();
-        setSynth(newSynth);
+        synth.current = newSynth;
         newSynth.createFromConfig(baseConfig);
         setCurrentConfig(newSynth.getCurrentConfig());
+
+        // Add keyboard event listeners
+        window.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('keyup', handleKeyUp);
 
         return () => {
             // Cleanup on unmount
             if (newSynth.context.state !== 'closed') {
                 newSynth.context.close();
             }
+            window.removeEventListener('keydown', handleKeyDown);
+            window.removeEventListener('keyup', handleKeyUp);
         };
-    }, []);
+    }, []); // Empty dependency array since we're using refs
 
     const handleOscConfigChange = (oscId: string, newConfig: any) => {
-        if (!synth || !currentConfig) return;
+        if (!synth.current || !currentConfig) return;
 
         // Update the config in place
         const oscConfig = currentConfig.components.oscillators[oscId];
         Object.assign(oscConfig, newConfig);
 
         // Update the oscillator instance directly
-        const oscNode = synth.components.get(oscId) as OscillatorEngineNode;
+        const oscNode = synth.current?.components.get(oscId) as OscillatorEngineNode;
         if (oscNode) {
             oscNode.updateConfig(oscConfig);
         }
@@ -730,22 +799,17 @@ export default function OscillatorPage() {
                 ))}
             </div>
 
-            <div className="mt-8">
-                <button
-                    onMouseDown={async () => {
-                        if (!synth) return;
-                        console.log('[UI] Playing note');
-                        await synth.playNote();
-                    }}
-                    onMouseUp={async () => {
-                        if (!synth) return;
-                        console.log('[UI] Stopping note');
-                        await synth.stopNote();
-                    }}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-quantico transition-colors"
-                >
-                    Play C4
-                </button>
+            <div className="mt-8 flex flex-col items-center gap-4">
+                <div className="text-sm font-quantico text-gray-400">
+                    Current Octave: {currentOctave}
+                </div>
+                <div className="text-sm font-quantico text-gray-400">
+                    Keyboard Controls:
+                    <br />
+                    Z/X: Octave Down/Up
+                    <br />
+                    A-K: Play Notes (W/E/T/Y/U for black keys)
+                </div>
             </div>
         </main>
     );
