@@ -2,7 +2,6 @@
 
 import React from 'react';
 import { SynthPath as SynthPad } from './components/SynthContainer';
-// import './globals.css';
 
 export default function Home() {
   return (

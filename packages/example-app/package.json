@@ -16,11 +16,15 @@
     "use-synth": "*"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.4",
     "@types/node": "^20.9.1",
     "@types/react": "19.1.2",
     "@types/react-dom": "19.1.2",
+    "autoprefixer": "^10.4.21",
     "eslint": "^8.53.0",
     "eslint-config-next": "15.3.1",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^4.1.4",
     "typescript": "^5.2.2"
   },
   "overrides": {
