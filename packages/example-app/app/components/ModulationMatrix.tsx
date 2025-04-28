@@ -52,8 +52,6 @@ export const ModulationMatrix: React.FC<ModulationMatrixProps> = ({
     activeTargetIds.has(target.id) || target.id === lastTouchedParam
   );
 
-  console.log({lastTouchedParam})
-
   return (
     <div className="bg-gray-800/50 rounded-lg p-2">
       <div className="flex justify-between items-center mb-2">

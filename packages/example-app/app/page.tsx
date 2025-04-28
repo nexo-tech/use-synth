@@ -907,7 +907,7 @@ export default function OscillatorPage() {
     });
     Object.entries(currentConfig.components.filters).forEach(([id, _]) => {
       targets.push(
-        { id: `${id}-freq`, name: 'Frequency', componentId: id, componentType: 'filter', parameter: 'frequency' },
+        { id: `${id}-frequency`, name: 'Frequency', componentId: id, componentType: 'filter', parameter: 'frequency' },
         { id: `${id}-q`, name: 'Q', componentId: id, componentType: 'filter', parameter: 'Q' },
         { id: `${id}-gain`, name: 'Gain', componentId: id, componentType: 'filter', parameter: 'gain' }
       );
@@ -985,7 +985,7 @@ export default function OscillatorPage() {
 
   const handleRemoveSource = (sourceId: string) => {
     // Remove all connections for this source
-    setModulationConnections(prev => 
+    setModulationConnections(prev =>
       prev.filter(conn => conn.sourceId !== sourceId)
     );
 
@@ -1021,7 +1021,7 @@ export default function OscillatorPage() {
   };
 
   const handleFilterConfigChange = (filterId: string, newConfig: Partial<FilterConfig>) => {
-    if (!synth.current) return;
+    if (!synth.current) { return; }
 
     const conf = synth.current.getCurrentConfig()
     // Update the config in place

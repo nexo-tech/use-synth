@@ -1,5 +1,6 @@
 import React from 'react';
 import { Knob } from './Knob';
+import { FilterConfig } from '../page';
 
 interface FilterTypeSelectorProps {
   value: string;
@@ -24,7 +25,7 @@ const FilterTypeSelector: React.FC<FilterTypeSelectorProps> = ({ value, onChange
             className={`px-1.5 py-0.5 rounded text-[10px] font-quantico transition-colors relative ${value === type.id
               ? 'bg-blue-600 text-white'
               : 'bg-gray-700 hover:bg-gray-600 text-gray-200'
-            }`}
+              }`}
             onClick={() => onChange(type.id)}
           >
             {type.label}
@@ -39,18 +40,13 @@ const FilterTypeSelector: React.FC<FilterTypeSelectorProps> = ({ value, onChange
 };
 
 interface FilterProps {
-  config: {
-    type: BiquadFilterType;
-    frequency?: number;
-    Q?: number;
-    gain?: number;
-  };
-  onConfigChange: (config: any) => void;
+  config: FilterConfig
+  onConfigChange: (config: Partial<FilterConfig>) => void;
 }
 
 export const Filter: React.FC<FilterProps> = ({ config, onConfigChange }) => {
   const handleTypeChange = (type: string) => {
-    onConfigChange({ ...config, type });
+    onConfigChange({ ...config, type: type as BiquadFilterType });
   };
 
   // Convert linear value (0-1) to logarithmic frequency (20-20000)
@@ -75,7 +71,7 @@ export const Filter: React.FC<FilterProps> = ({ config, onConfigChange }) => {
 
   const handleFrequencyChange = (value: number) => {
     const freq = linearToLog(value);
-    onConfigChange({ ...config, frequency: freq });
+    onConfigChange({ frequency: freq });
   };
 
   // Format frequency for display
@@ -87,18 +83,18 @@ export const Filter: React.FC<FilterProps> = ({ config, onConfigChange }) => {
   };
 
   const handleQChange = (Q: number) => {
-    onConfigChange({ ...config, Q });
+    onConfigChange({ Q });
   };
 
   const handleGainChange = (gain: number) => {
-    onConfigChange({ ...config, gain });
+    onConfigChange({ gain });
   };
 
   return (
     <div className="bg-gray-900 p-2 rounded-lg shadow-xl border border-gray-800">
       <div className="flex flex-col items-center">
         <FilterTypeSelector value={config.type} onChange={handleTypeChange} />
-        
+
         <div className="flex justify-center gap-3 mt-2">
           <Knob
             label="Freq"
@@ -110,7 +106,7 @@ export const Filter: React.FC<FilterProps> = ({ config, onConfigChange }) => {
             onChange={handleFrequencyChange}
             formatLabel={(value) => formatFrequency(linearToLog(value)) + 'Hz'}
           />
-          
+
           <Knob
             label="Q"
             value={config.Q ?? 1}
@@ -120,7 +116,7 @@ export const Filter: React.FC<FilterProps> = ({ config, onConfigChange }) => {
             size="sm"
             onChange={handleQChange}
           />
-          
+
           <Knob
             label="Gain"
             value={config.gain ?? 0}
