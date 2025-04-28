@@ -41,6 +41,7 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
   const [nodePositions, setNodePositions] = React.useState<Record<string, { x: number; y: number }>>({});
   const [draggingNode, setDraggingNode] = React.useState<string | null>(null);
   const [dragStart, setDragStart] = React.useState<{ x: number; y: number } | null>(null);
+  const hasDragged = React.useRef(false);
   const [refreshID, setRefreshID] = React.useState(0);
 
   // Initialize node positions on mount and when components change
@@ -89,6 +90,9 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
       const newX = e.clientX - rect.left - dragStart.x;
       const newY = e.clientY - rect.top - dragStart.y;
 
+      hasDragged.current = true;
+      setConnecting(null)
+      setTempConnection(null)
       setNodePositions(prev => ({
         ...prev,
         [draggingNode]: {
@@ -110,6 +114,15 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
       x: offsetX,
       y: offsetY
     });
+    hasDragged.current = false;
+  };
+
+  const handleClick = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (!hasDragged.current) {
+      setConnecting({ from: id, type: id.startsWith('osc') ? 'oscillator' : id.startsWith('fil') ? 'filter' : 'envelope' });
+    }
+    hasDragged.current = false;
   };
 
   const handleMouseUp = () => {
@@ -121,6 +134,7 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
     setHoveredComponent(null);
     setDraggingNode(null);
     setDragStart(null);
+    setRefreshID(prev => prev + 1);
   };
 
   const handleConnect = (from: string, to: string) => {
@@ -357,11 +371,7 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
           <div
             key={id}
             onMouseDown={(e) => handleMouseDown(e, id)}
-            onClick={() => {
-              if (!connecting && !draggingNode) {
-                setConnecting({ from: id, type: id.startsWith('osc') ? 'oscillator' : id.startsWith('fil') ? 'filter' : 'envelope' });
-              }
-            }}
+            onClick={(e) => handleClick(e, id)}
             onMouseEnter={() => {
               if (connecting && id !== connecting.from) {
                 setHoveredComponent(id);
