@@ -402,7 +402,6 @@ class OscillatorEngineNode implements AudioEngineNode {
   type = 'oscillator';
   engine: Engine2;
   id: string;
-  envelope: ADSREnvelope | null = null;
   instances: Map<string, OscillatorEngineNodeInstance> = new Map();
   config: OscillatorConfig;
   outputs: AudioEngineNode[] = [];
@@ -437,12 +436,13 @@ class OscillatorEngineNode implements AudioEngineNode {
     instance.setFrequency(freq);
     console.log(`[Osc ${this.id}] Set frequency to ${freq}Hz for note ${note}`);
 
-    // instance.masterGain.gain.value = velocity / 127;
     instance.updateLevel(this.config.level ?? 1);
 
-    if (this.envelope) {
-      console.log(`[Osc ${this.id}] Applying envelope ${this.envelope.id}`);
-      this.envelope.handleStartNode(instance.adsrGain);
+    // Find connected envelope
+    const envelope = this.outputs.find(node => node.type === 'adsr') as ADSREnvelope | undefined;
+    if (envelope) {
+      console.log(`[Osc ${this.id}] Applying envelope ${envelope.id}`);
+      envelope.handleStartNode(instance.adsrGain);
     }
 
     instance.start();
@@ -450,7 +450,9 @@ class OscillatorEngineNode implements AudioEngineNode {
 
     // hook this voice into the master output
     this.outputs.forEach((node) => {
-      node.handleInputAudio(instance.masterGain);
+      if (node.type !== 'adsr') { // Don't connect to envelope directly
+        node.handleInputAudio(instance.masterGain);
+      }
     });
 
     return instanceId;
@@ -465,11 +467,12 @@ class OscillatorEngineNode implements AudioEngineNode {
     }
 
     const now = this.engine.context.currentTime;
-    const releaseTime = this.envelope?.config.release ?? 0;
+    const envelope = this.outputs.find(node => node.type === 'adsr') as ADSREnvelope | undefined;
+    const releaseTime = envelope?.config.release ?? 0;
 
-    if (this.envelope) {
+    if (envelope) {
       console.log(`[Osc ${this.id}] Applying envelope release`);
-      this.envelope.handleStopNode(instance.adsrGain);
+      envelope.handleStopNode(instance.adsrGain);
     }
 
     // Schedule the cleanup after the release time
@@ -718,18 +721,6 @@ class Engine2 {
         });
       }
     }
-
-    // wire envelopes to oscillators
-    for (const id in config.components.oscillators) {
-      const oscConfig = config.components.oscillators[id];
-      const osc = this.components.get(id) as OscillatorEngineNode;
-      if (oscConfig.envelope) {
-        const env = this.components.get(oscConfig.envelope);
-        if (env && env.type === 'adsr') {
-          osc.envelope = env as ADSREnvelope;
-        }
-      }
-    }
   }
 }
 
@@ -745,7 +736,6 @@ const baseConfig: UseSynthConfig = {
         unisonVoices: 5,
         unisonSpread: 25,
         unisonStereo: 50,
-        envelope: 'env1',
       },
       osc2: {
         type: 'sawtooth',
@@ -755,7 +745,6 @@ const baseConfig: UseSynthConfig = {
         unisonVoices: 5,
         unisonSpread: 25,
         unisonStereo: 50,
-        envelope: 'env1',
       },
     },
     filters: {
@@ -777,9 +766,9 @@ const baseConfig: UseSynthConfig = {
     },
   },
   routing: [
-    { from: 'osc1', to: 'fil1' },
+    { from: 'osc1', to: 'env1' },
     { from: 'fil1', to: 'output' },
-    { from: 'osc2', to: 'output' }
+    { from: 'osc2', to: 'env1' }
   ],
 };
 

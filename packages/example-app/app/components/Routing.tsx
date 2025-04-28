@@ -38,6 +38,43 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
   const [hoveredComponent, setHoveredComponent] = React.useState<string | null>(null);
   const [showNewComponentModal, setShowNewComponentModal] = React.useState(false);
   const [newComponentType, setNewComponentType] = React.useState<'oscillator' | 'filter' | 'envelope'>('oscillator');
+  const [nodePositions, setNodePositions] = React.useState<Record<string, { x: number; y: number }>>({});
+  const [draggingNode, setDraggingNode] = React.useState<string | null>(null);
+  const [dragStart, setDragStart] = React.useState<{ x: number; y: number } | null>(null);
+
+  // Initialize node positions on mount and when components change
+  React.useEffect(() => {
+    const positions: Record<string, { x: number; y: number }> = {};
+    let x = 50;
+    let y = 50;
+
+    // Position oscillators
+    Object.keys(config.components.oscillators).forEach(id => {
+      positions[id] = { x, y };
+      y += 100;
+    });
+
+    // Position filters
+    x = 200;
+    y = 50;
+    Object.keys(config.components.filters).forEach(id => {
+      positions[id] = { x, y };
+      y += 100;
+    });
+
+    // Position envelopes
+    x = 350;
+    y = 50;
+    Object.keys(config.components.envelopes).forEach(id => {
+      positions[id] = { x, y };
+      y += 100;
+    });
+
+    // Position output
+    positions['output'] = { x: 500, y: 100 };
+
+    setNodePositions(positions);
+  }, [config.components]);
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (connecting) {
@@ -46,7 +83,32 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
         x: e.clientX - rect.left,
         y: e.clientY - rect.top
       });
+    } else if (draggingNode && dragStart) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const newX = e.clientX - rect.left - dragStart.x;
+      const newY = e.clientY - rect.top - dragStart.y;
+      
+      setNodePositions(prev => ({
+        ...prev,
+        [draggingNode]: {
+          x: newX,
+          y: newY
+        }
+      }));
     }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent, id: string) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const nodeRect = e.currentTarget.getBoundingClientRect();
+    const offsetX = e.clientX - nodeRect.left;
+    const offsetY = e.clientY - nodeRect.top;
+    
+    setDraggingNode(id);
+    setDragStart({
+      x: offsetX,
+      y: offsetY
+    });
   };
 
   const handleMouseUp = () => {
@@ -56,6 +118,8 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
     setConnecting(null);
     setTempConnection(null);
     setHoveredComponent(null);
+    setDraggingNode(null);
+    setDragStart(null);
   };
 
   const handleConnect = (from: string, to: string) => {
@@ -164,64 +228,25 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
     }
   };
 
-  // Calculate positions for the graph layout
-  const calculatePositions = () => {
-    const positions: Record<string, { x: number; y: number }> = {};
-    let y = 0;
-
-    // Position oscillators
-    Object.keys(config.components.oscillators).forEach(id => {
-      positions[id] = { x: 0, y: y };
-      y += 50;
-    });
-
-    // Position filters
-    y = 0;
-    Object.keys(config.components.filters).forEach(id => {
-      positions[id] = { x: 150, y: y };
-      y += 50;
-    });
-
-    // Position envelopes
-    y = 0;
-    Object.keys(config.components.envelopes).forEach(id => {
-      positions[id] = { x: 300, y: y };
-      y += 50;
-    });
-
-    // Position output
-    positions['output'] = { x: 450, y: Math.max(y - 50, 0) };
-
-    return positions;
-  };
-
-  const positions = calculatePositions();
-
   // Calculate connection paths with bezier curves
   const getConnectionPaths = () => {
     const paths: { path: string; from: string; to: string }[] = [];
-    const lines: { start: { x: number; y: number }, end: { x: number; y: number } }[] = [];
 
-    config.routing.forEach((conn, index) => {
-      const fromPos = positions[conn.from];
-      const toPos = positions[conn.to];
+    config.routing.forEach((conn) => {
+      const fromPos = nodePositions[conn.from];
+      const toPos = nodePositions[conn.to];
       if (!fromPos || !toPos) return;
 
-      const start = { x: fromPos.x + 50, y: fromPos.y + 25 };
-      const end = { x: toPos.x, y: toPos.y + 25 };
+      const start = { x: fromPos.x + 40, y: fromPos.y + 20 };
+      const end = { x: toPos.x, y: toPos.y + 20 };
 
-      // Check for intersections with existing lines
-      const newLine = { start, end };
-      const hasIntersection = lines.some(line => doLinesIntersect(line, newLine));
+      // Calculate control points for a smoother curve
+      const midX = (start.x + end.x) / 2;
+      const controlPoint1 = { x: midX, y: start.y };
+      const controlPoint2 = { x: midX, y: end.y };
 
-      if (!hasIntersection) {
-        lines.push(newLine);
-        paths.push({
-          path: getBezierPath(start, end),
-          from: conn.from,
-          to: conn.to
-        });
-      }
+      const path = `M ${start.x} ${start.y} C ${controlPoint1.x} ${controlPoint1.y}, ${controlPoint2.x} ${controlPoint2.y}, ${end.x} ${end.y}`;
+      paths.push({ path, from: conn.from, to: conn.to });
     });
 
     return paths;
@@ -257,49 +282,39 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
 
       {/* Graph Layout */}
       <div 
-        className="relative h-[200px] border border-gray-700 rounded-lg bg-gray-800/50"
+        className="relative h-[400px] border border-gray-700 rounded-lg bg-gray-800/50 overflow-hidden"
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
       >
         {/* SVG for connections */}
         <svg className="absolute w-full h-full" style={{ pointerEvents: 'all' }}>
-          {config.routing.map((conn, index) => {
-            const fromPos = positions[conn.from];
-            const toPos = positions[conn.to];
-            if (!fromPos || !toPos) return null;
-
-            const start = { x: fromPos.x + 40, y: fromPos.y + 20 };
-            const end = { x: toPos.x, y: toPos.y + 20 };
-            const path = getBezierPath(start, end);
-
-            return (
-              <g key={index} style={{ pointerEvents: 'all' }}>
-                <path
-                  d={path}
-                  stroke={hoveredConnection?.from === conn.from && hoveredConnection?.to === conn.to ? "#6B7280" : "#4B5563"}
-                  strokeWidth="4"
-                  fill="none"
-                  onMouseEnter={() => setHoveredConnection({ from: conn.from, to: conn.to })}
-                  onMouseLeave={() => setHoveredConnection(null)}
-                  onClick={() => handleDeleteConnection(conn.from, conn.to)}
-                  style={{ cursor: 'pointer' }}
-                />
-                <circle
-                  cx={toPos.x}
-                  cy={toPos.y + 20}
-                  r="4"
-                  fill="#4B5563"
-                />
-              </g>
-            );
-          })}
+          {connectionPaths.map(({ path, from, to }, index) => (
+            <g key={index} style={{ pointerEvents: 'all' }}>
+              <path
+                d={path}
+                stroke={hoveredConnection?.from === from && hoveredConnection?.to === to ? "#6B7280" : "#4B5563"}
+                strokeWidth="2"
+                fill="none"
+                onMouseEnter={() => setHoveredConnection({ from, to })}
+                onMouseLeave={() => setHoveredConnection(null)}
+                onClick={() => handleDeleteConnection(from, to)}
+                style={{ cursor: 'pointer' }}
+              />
+              <circle
+                cx={nodePositions[to].x}
+                cy={nodePositions[to].y + 20}
+                r="4"
+                fill="#4B5563"
+              />
+            </g>
+          ))}
           {tempConnection && connecting && (
             <path
               d={getBezierPath(
-                { x: positions[connecting.from].x + 40, y: positions[connecting.from].y + 20 },
+                { x: nodePositions[connecting.from].x + 40, y: nodePositions[connecting.from].y + 20 },
                 hoveredComponent ? 
-                  { x: positions[hoveredComponent].x, y: positions[hoveredComponent].y + 20 } : 
+                  { x: nodePositions[hoveredComponent].x, y: nodePositions[hoveredComponent].y + 20 } : 
                   tempConnection
               )}
               stroke="#6B7280"
@@ -311,11 +326,12 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
         </svg>
 
         {/* Components */}
-        {Object.entries(positions).map(([id, pos]) => (
+        {Object.entries(nodePositions).map(([id, pos]) => (
           <div
             key={id}
+            onMouseDown={(e) => handleMouseDown(e, id)}
             onClick={() => {
-              if (!connecting && id !== 'output') {
+              if (!connecting && !draggingNode) {
                 setConnecting({ from: id, type: id.startsWith('osc') ? 'oscillator' : id.startsWith('fil') ? 'filter' : 'envelope' });
               }
             }}
@@ -329,12 +345,12 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
                 setHoveredComponent(null);
               }
             }}
-            className={`group absolute w-[80px] h-[40px] rounded-lg cursor-pointer ${
+            className={`group absolute w-[80px] h-[40px] rounded-lg cursor-move ${
               id === 'output' ? getComponentColor('output') : 
               id.startsWith('osc') ? getComponentColor('oscillator') : 
               id.startsWith('fil') ? getComponentColor('filter') : 
               getComponentColor('envelope')
-            } ${hoveredComponent === id ? 'ring-2 ring-white' : ''}`}
+            } ${hoveredComponent === id ? 'ring-2 ring-white' : ''} ${draggingNode === id ? 'ring-2 ring-white shadow-lg' : ''}`}
             style={{
               left: pos.x,
               top: pos.y,
