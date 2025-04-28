@@ -934,15 +934,15 @@ export default function OscillatorPage() {
         </div>
 
         {/* Main Content */}
-        <div className="grid grid-cols-12 gap-6">
+        <div className="flex flex-row gap-6">
           {/* Left Column - Oscillators */}
-          <div className="col-span-4">
-            <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
-              <h2 className="text-lg font-semibold mb-4 text-gray-300">Oscillators</h2>
-              <div className="flex flex-col gap-4">
+          <div className="col-span-3">
+            <div className="bg-gray-800/50 rounded-xl  border-gray-700">
+              {/* <h2 className="text-lg font-semibold mb-4 text-gray-300">Oscillators</h2> */}
+              <div className="flex flex-col gap-2">
                 {currentConfig?.components.oscillators && Object.entries(currentConfig.components.oscillators).map(([id, config]) => (
-                  <div key={id} className="bg-gray-800 rounded-lg p-3 border border-gray-700">
-                    <h3 className="text-sm font-quantico mb-2 text-gray-400">Osc {id}</h3>
+                  <div key={id} className="bg-gray-800 rounded-lg border-gray-700 ">
+                    <h3 className="text-sm font-quantico pt-1 pl-1 text-gray-400">Osc {id}</h3>
                     <Osc
                       config={config}
                       onConfigChange={(newConfig) => handleOscConfigChange(id, newConfig)}
