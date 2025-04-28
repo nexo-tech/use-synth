@@ -127,7 +127,7 @@ class OscillatorEngineNodeInstance {
     const pitchOffset = this.config.pitch ?? 0;
     const pitchMultiplier = Math.pow(2, pitchOffset / 12);
     const finalFrequency = this.baseFrequency * pitchMultiplier;
-    
+
     this.voices.forEach(voice => {
       voice.osc.frequency.value = finalFrequency;
       // Update delay time to maintain phase relationship
@@ -510,13 +510,7 @@ class OscillatorEngineNode implements AudioEngineNode {
         instance.updateFrequency();
       }
       if (newConfig.unisonVoices !== undefined) {
-        // Store current frequency before updating unison
-        const currentFreq = instance.voices[0]?.osc.frequency.value;
         instance.updateUnison(newConfig);
-        // Restore frequency after unison update
-        if (currentFreq) {
-          instance.setFrequency(currentFreq);
-        }
       }
     });
   }
