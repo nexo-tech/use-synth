@@ -37,7 +37,7 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
   const [hoveredConnection, setHoveredConnection] = React.useState<{ from: string; to: string } | null>(null);
   const [hoveredComponent, setHoveredComponent] = React.useState<string | null>(null);
   const [showNewComponentModal, setShowNewComponentModal] = React.useState(false);
-  const [newComponentType, setNewComponentType] = React.useState<'oscillator' | 'filter'>('oscillator');
+  const [newComponentType, setNewComponentType] = React.useState<'oscillator' | 'filter' | 'envelope'>('oscillator');
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (connecting) {
@@ -90,16 +90,17 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
     });
   };
 
-  const handleAddComponent = (type: 'oscillator' | 'filter') => {
+  const handleAddComponent = (type: 'oscillator' | 'filter' | 'envelope') => {
     const newConfig = { ...config };
-    const prefix = type === 'oscillator' ? 'osc' : 'fil';
+    const prefix = type === 'oscillator' ? 'osc' : type === 'filter' ? 'fil' : 'env';
     let index = 1;
     let newId = `${prefix}${index}`;
 
     // Find the next available ID
     while (
       (type === 'oscillator' && newConfig.components.oscillators[newId]) ||
-      (type === 'filter' && newConfig.components.filters[newId])
+      (type === 'filter' && newConfig.components.filters[newId]) ||
+      (type === 'envelope' && newConfig.components.envelopes[newId])
     ) {
       index++;
       newId = `${prefix}${index}`;
@@ -110,11 +111,18 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
         type: 'sine',
         level: 0.5
       };
-    } else {
+    } else if (type === 'filter') {
       newConfig.components.filters[newId] = {
         type: 'lowpass',
         frequency: 1000,
         Q: 1
+      };
+    } else {
+      newConfig.components.envelopes[newId] = {
+        attack: 0.05,
+        decay: 0.2,
+        sustain: 1.0,
+        release: 0.4
       };
     }
 
@@ -129,6 +137,8 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
       delete newConfig.components.oscillators[id];
     } else if (id.startsWith('fil')) {
       delete newConfig.components.filters[id];
+    } else if (id.startsWith('env')) {
+      delete newConfig.components.envelopes[id];
     }
 
     // Remove any connections involving this component
@@ -145,6 +155,8 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
         return 'bg-blue-500';
       case 'filter':
         return 'bg-green-500';
+      case 'envelope':
+        return 'bg-purple-500';
       case 'output':
         return 'bg-red-500';
       default:
@@ -160,18 +172,25 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
     // Position oscillators
     Object.keys(config.components.oscillators).forEach(id => {
       positions[id] = { x: 0, y: y };
-      y += 50; // Reduced spacing
+      y += 50;
     });
 
     // Position filters
     y = 0;
     Object.keys(config.components.filters).forEach(id => {
-      positions[id] = { x: 150, y: y }; // Reduced horizontal spacing
+      positions[id] = { x: 150, y: y };
+      y += 50;
+    });
+
+    // Position envelopes
+    y = 0;
+    Object.keys(config.components.envelopes).forEach(id => {
+      positions[id] = { x: 300, y: y };
       y += 50;
     });
 
     // Position output
-    positions['output'] = { x: 300, y: Math.max(y - 50, 0) }; // Reduced horizontal spacing
+    positions['output'] = { x: 450, y: Math.max(y - 50, 0) };
 
     return positions;
   };
@@ -226,6 +245,12 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
             className="px-2 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
           >
             + Filter
+          </button>
+          <button
+            onClick={() => handleAddComponent('envelope')}
+            className="px-2 py-1 bg-purple-600 text-white rounded text-sm hover:bg-purple-700"
+          >
+            + ADSR
           </button>
         </div>
       </div>
@@ -291,7 +316,7 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
             key={id}
             onClick={() => {
               if (!connecting && id !== 'output') {
-                setConnecting({ from: id, type: id.startsWith('osc') ? 'oscillator' : 'filter' });
+                setConnecting({ from: id, type: id.startsWith('osc') ? 'oscillator' : id.startsWith('fil') ? 'filter' : 'envelope' });
               }
             }}
             onMouseEnter={() => {
@@ -307,7 +332,8 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
             className={`group absolute w-[80px] h-[40px] rounded-lg cursor-pointer ${
               id === 'output' ? getComponentColor('output') : 
               id.startsWith('osc') ? getComponentColor('oscillator') : 
-              getComponentColor('filter')
+              id.startsWith('fil') ? getComponentColor('filter') : 
+              getComponentColor('envelope')
             } ${hoveredComponent === id ? 'ring-2 ring-white' : ''}`}
             style={{
               left: pos.x,

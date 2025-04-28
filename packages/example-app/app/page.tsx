@@ -5,6 +5,7 @@ import Osc from './components/Osc';
 import Filter from './components/Filter';
 import Oscilloscope from './components/Oscilloscope';
 import Routing from './components/Routing';
+import { Envelope } from './components/Envelope';
 
 interface EngineNode {
   type: string;
@@ -744,7 +745,7 @@ const baseConfig: UseSynthConfig = {
         unisonVoices: 5,
         unisonSpread: 25,
         unisonStereo: 50,
-        envelope: 'amp',
+        envelope: 'env1',
       },
       osc2: {
         type: 'sawtooth',
@@ -754,7 +755,7 @@ const baseConfig: UseSynthConfig = {
         unisonVoices: 5,
         unisonSpread: 25,
         unisonStereo: 50,
-        envelope: 'amp',
+        envelope: 'env1',
       },
     },
     filters: {
@@ -772,7 +773,7 @@ const baseConfig: UseSynthConfig = {
       vibrato: { type: 'sine', rate: 5, sync: false },
     },
     envelopes: {
-      amp: { attack: 0.05, decay: 0.2, sustain: 1.0, release: 0.4 },
+      env1: { attack: 0.05, decay: 0.2, sustain: 1.0, release: 0.4 },
     },
   },
   routing: [
@@ -912,6 +913,23 @@ export default function OscillatorPage() {
     }
   };
 
+  const handleEnvelopeConfigChange = (envId: string, newConfig: Partial<EnvelopeConfig>) => {
+    if (!synth.current) return;
+
+    const conf = synth.current.getCurrentConfig()
+    // Update the config in place
+    const envConfig = conf.components.envelopes[envId];
+    for (let key in newConfig) {
+      (envConfig as any)[key] = (newConfig as any)[key];
+    }
+    // Update the envelope instance directly
+    const envNode = synth.current?.components.get(envId) as ADSREnvelope;
+    if (envNode) {
+      envNode.config = { ...envNode.config, ...newConfig };
+      updateUI(x => x + 1)
+    }
+  };
+
   const handleConfigChange = (newConfig: UseSynthConfig) => {
     setCurrentConfig(newConfig);
     if (synth.current) {
@@ -938,11 +956,10 @@ export default function OscillatorPage() {
           {/* Left Column - Oscillators */}
           <div className="col-span-3">
             <div className="bg-gray-800/50 rounded-xl  border-gray-700">
-              {/* <h2 className="text-lg font-semibold mb-4 text-gray-300">Oscillators</h2> */}
               <div className="flex flex-col gap-2">
                 {currentConfig?.components.oscillators && Object.entries(currentConfig.components.oscillators).map(([id, config]) => (
                   <div key={id} className="bg-gray-800 rounded-lg border-gray-700 ">
-                    <h3 className="text-sm font-quantico pt-1 pl-1 text-gray-400">Osc {id}</h3>
+                    <h3 className="text-sm font-quantico pt-1 pl-1 text-gray-400">{id}</h3>
                     <Osc
                       config={config}
                       onConfigChange={(newConfig) => handleOscConfigChange(id, newConfig)}
@@ -959,7 +976,7 @@ export default function OscillatorPage() {
               <div className="flex flex-col gap-2">
                 {currentConfig?.components.filters && Object.entries(currentConfig.components.filters).map(([id, config]) => (
                   <div key={id} className="bg-gray-800 rounded-lg border-gray-700">
-                    <h3 className="text-sm font-quantico pt-1 pl-1 text-gray-400">Filter {id}</h3>
+                    <h3 className="text-sm font-quantico pt-1 pl-1 text-gray-400">{id}</h3>
                     <Filter
                       config={config}
                       onConfigChange={(newConfig) => handleFilterConfigChange(id, newConfig)}
@@ -970,10 +987,19 @@ export default function OscillatorPage() {
             </div>
           </div>
 
-          {/* Right Column - Visuals */}
+          {/* Right Column - Envelopes */}
           <div className="col-span-3">
             <div className="bg-gray-800/50 rounded-xl border-gray-700">
               <div className="flex flex-col gap-2">
+                {currentConfig?.components.envelopes && Object.entries(currentConfig.components.envelopes).map(([id, config]) => (
+                  <div key={id} className="bg-gray-800 rounded-lg border-gray-700">
+                    <h3 className="text-sm font-quantico pt-1 pl-1 text-gray-400">{id}</h3>
+                    <Envelope
+                      config={config}
+                      onConfigChange={(newConfig) => handleEnvelopeConfigChange(id, newConfig)}
+                    />
+                  </div>
+                ))}
                 {masterGainRef.current && (
                   <div className="bg-gray-800 rounded-lg border-gray-700">
                     <h3 className="text-sm font-quantico pt-1 pl-1 text-gray-400">Output</h3>
