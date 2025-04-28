@@ -934,7 +934,7 @@ export default function OscillatorPage() {
         </div>
 
         {/* Main Content */}
-        <div className="flex flex-row gap-6">
+        <div className="flex flex-row gap-2">
           {/* Left Column - Oscillators */}
           <div className="col-span-3">
             <div className="bg-gray-800/50 rounded-xl  border-gray-700">
