@@ -737,7 +737,7 @@ const baseConfig: UseSynthConfig = {
   maxVoices: 5,
   components: {
     oscillators: {
-      main: {
+      osc1: {
         type: 'sawtooth',
         detune: -7,
         level: 0.5,
@@ -746,7 +746,7 @@ const baseConfig: UseSynthConfig = {
         unisonStereo: 50,
         envelope: 'amp',
       },
-      b: {
+      osc2: {
         type: 'sawtooth',
         detune: -7,
         level: 0.5,
@@ -758,7 +758,7 @@ const baseConfig: UseSynthConfig = {
       },
     },
     filters: {
-      lpf: {
+      fil1: {
         type: 'lowpass',
         frequency: 1000,
         Q: 1,
@@ -776,9 +776,9 @@ const baseConfig: UseSynthConfig = {
     },
   },
   routing: [
-    { from: 'main', to: 'lpf' },
-    { from: 'lpf', to: 'output' },
-    { from: 'b', to: 'output' }
+    { from: 'osc1', to: 'fil1' },
+    { from: 'fil1', to: 'output' },
+    { from: 'osc2', to: 'output' }
   ],
 };
 
