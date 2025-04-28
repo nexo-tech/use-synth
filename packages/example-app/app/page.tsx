@@ -921,55 +921,83 @@ export default function OscillatorPage() {
   };
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-8 bg-gray-950 text-white">
-      <div className="flex flex-col gap-4">
-        {currentConfig?.components.oscillators && Object.entries(currentConfig.components.oscillators).map(([id, config]) => (
-          <div key={id} className="flex flex-col items-center">
-            <h3 className="text-sm font-quantico mb-2 text-gray-400">Oscillator {id}</h3>
-            <Osc
-              config={config}
-              onConfigChange={(newConfig) => handleOscConfigChange(id, newConfig)}
-            />
+    <main className="flex min-h-screen flex-col items-center p-8 bg-gray-950 text-white">
+      <div className="flex flex-col gap-6 w-full max-w-5xl">
+        {/* Header */}
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent">
+            useSynth
+          </h1>
+          <div className="text-sm font-quantico text-gray-400">
+            Octave: {currentOctave} (Z/X: Change)
           </div>
-        ))}
-
-        {currentConfig?.components.filters && Object.entries(currentConfig.components.filters).map(([id, config]) => (
-          <div key={id} className="flex flex-col items-center">
-            <h3 className="text-sm font-quantico mb-2 text-gray-400">Filter {id}</h3>
-            <Filter
-              config={config}
-              onConfigChange={(newConfig) => handleFilterConfigChange(id, newConfig)}
-            />
-          </div>
-        ))}
-
-        {masterGainRef.current && (
-          <div className="mt-4">
-            <Oscilloscope
-              audioNode={masterGainRef.current}
-              width={400}
-              height={100}
-              backgroundColor="#1a1a1a"
-              lineColor="#00ff00"
-            />
-          </div>
-        )}
-      </div>
-
-      <div className="mt-8 w-full max-w-4xl">
-        <Routing config={currentConfig} onConfigChange={handleConfigChange} />
-      </div>
-
-      <div className="mt-8 flex flex-col items-center gap-4">
-        <div className="text-sm font-quantico text-gray-400">
-          Current Octave: {currentOctave}
         </div>
-        <div className="text-sm font-quantico text-gray-400">
-          Keyboard Controls:
-          <br />
-          Z/X: Octave Down/Up
-          <br />
-          A-K: Play Notes (W/E/T/Y/U for black keys)
+
+        {/* Main Content */}
+        <div className="grid grid-cols-12 gap-6">
+          {/* Left Column - Oscillators */}
+          <div className="col-span-4">
+            <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
+              <h2 className="text-lg font-semibold mb-4 text-gray-300">Oscillators</h2>
+              <div className="flex flex-col gap-4">
+                {currentConfig?.components.oscillators && Object.entries(currentConfig.components.oscillators).map(([id, config]) => (
+                  <div key={id} className="bg-gray-800 rounded-lg p-3 border border-gray-700">
+                    <h3 className="text-sm font-quantico mb-2 text-gray-400">Osc {id}</h3>
+                    <Osc
+                      config={config}
+                      onConfigChange={(newConfig) => handleOscConfigChange(id, newConfig)}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Middle Column - Filters */}
+          <div className="col-span-4">
+            <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
+              <h2 className="text-lg font-semibold mb-4 text-gray-300">Filters</h2>
+              <div className="flex flex-col gap-4">
+                {currentConfig?.components.filters && Object.entries(currentConfig.components.filters).map(([id, config]) => (
+                  <div key={id} className="bg-gray-800 rounded-lg p-3 border border-gray-700">
+                    <h3 className="text-sm font-quantico mb-2 text-gray-400">Filter {id}</h3>
+                    <Filter
+                      config={config}
+                      onConfigChange={(newConfig) => handleFilterConfigChange(id, newConfig)}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column - Visuals */}
+          <div className="col-span-4">
+            <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
+              <h2 className="text-lg font-semibold mb-4 text-gray-300">Output</h2>
+              {masterGainRef.current && (
+                <div className="bg-gray-800 rounded-lg p-3 border border-gray-700">
+                  <Oscilloscope
+                    audioNode={masterGainRef.current}
+                    width={300}
+                    height={100}
+                    backgroundColor="#1a1a1a"
+                    lineColor="#00ff00"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Routing Section */}
+        <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
+          <Routing config={currentConfig} onConfigChange={handleConfigChange} />
+        </div>
+
+        {/* Keyboard Controls */}
+        <div className="text-xs font-quantico text-gray-400 text-center">
+          Keyboard: A-K (W/E/T/Y/U for black keys)
         </div>
       </div>
     </main>

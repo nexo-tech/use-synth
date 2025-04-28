@@ -99,69 +99,80 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
-        {/* Oscillators */}
-        <div className="col-span-1">
-          <h3 className="text-lg font-semibold mb-2">Oscillators</h3>
-          <div className="space-y-2">
-            {Object.keys(config.components.oscillators).map(id => (
-              <div
-                key={id}
-                draggable
-                onDragStart={() => handleDragStart(id, 'oscillator')}
-                className={`p-2 rounded ${getComponentColor('oscillator')} cursor-move`}
-              >
-                {id}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Filters */}
-        <div className="col-span-1">
-          <h3 className="text-lg font-semibold mb-2">Filters</h3>
-          <div className="space-y-2">
-            {Object.keys(config.components.filters).map(id => (
-              <div
-                key={id}
-                draggable
-                onDragStart={() => handleDragStart(id, 'filter')}
-                className={`p-2 rounded ${getComponentColor('filter')} cursor-move`}
-              >
-                {id}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Output */}
-        <div className="col-span-1">
-          <h3 className="text-lg font-semibold mb-2">Output</h3>
-          <div
-            onDragOver={e => e.preventDefault()}
-            onDrop={() => handleDrop('output')}
-            className={`p-2 rounded ${getComponentColor('output')}`}
-          >
-            output
-          </div>
-        </div>
-      </div>
-
-      {/* Connections */}
-      <div className="mt-8">
-        <h3 className="text-lg font-semibold mb-2">Connections</h3>
-        <div className="space-y-2">
-          {config.routing.map((conn, index) => (
-            <div key={index} className="flex items-center gap-2">
-              <span>{conn.from} → {conn.to}</span>
-              <button
-                onClick={() => handleDeleteConnection(conn.from, conn.to)}
-                className="text-red-500 hover:text-red-700"
-              >
-                ×
-              </button>
+      <div className="flex flex-col gap-8">
+        {/* Components Row */}
+        <div className="flex flex-wrap gap-4">
+          {/* Oscillators */}
+          <div className="flex-1 min-w-[200px]">
+            <h3 className="text-lg font-semibold mb-2">Oscillators</h3>
+            <div className="flex flex-wrap gap-2">
+              {Object.keys(config.components.oscillators).map(id => (
+                <div
+                  key={id}
+                  draggable
+                  onDragStart={() => handleDragStart(id, 'oscillator')}
+                  className={`p-2 rounded ${getComponentColor('oscillator')} cursor-move`}
+                >
+                  {id}
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
+
+          {/* Filters */}
+          <div className="flex-1 min-w-[200px]">
+            <h3 className="text-lg font-semibold mb-2">Filters</h3>
+            <div className="flex flex-wrap gap-2">
+              {Object.keys(config.components.filters).map(id => (
+                <div
+                  key={id}
+                  draggable
+                  onDragStart={() => handleDragStart(id, 'filter')}
+                  className={`p-2 rounded ${getComponentColor('filter')} cursor-move`}
+                >
+                  {id}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Output */}
+          <div className="flex-1 min-w-[200px]">
+            <h3 className="text-lg font-semibold mb-2">Output</h3>
+            <div
+              onDragOver={e => e.preventDefault()}
+              onDrop={() => handleDrop('output')}
+              className={`p-2 rounded ${getComponentColor('output')} inline-block`}
+            >
+              output
+            </div>
+          </div>
+        </div>
+
+        {/* Connections */}
+        <div className="mt-4">
+          <h3 className="text-lg font-semibold mb-2">Connections</h3>
+          <div className="flex flex-wrap gap-4">
+            {config.routing.map((conn, index) => (
+              <div key={index} className="flex items-center gap-2 bg-gray-800 p-2 rounded">
+                <span className="flex items-center gap-1">
+                  <span className={`px-2 py-1 rounded ${getComponentColor('oscillator')}`}>
+                    {conn.from}
+                  </span>
+                  <span>→</span>
+                  <span className={`px-2 py-1 rounded ${getComponentColor('filter')}`}>
+                    {conn.to}
+                  </span>
+                </span>
+                <button
+                  onClick={() => handleDeleteConnection(conn.from, conn.to)}
+                  className="text-red-500 hover:text-red-700"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
