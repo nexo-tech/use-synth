@@ -6,13 +6,55 @@ interface RoutingProps {
   onConfigChange: (newConfig: UseSynthConfig) => void;
 }
 
+// Helper function to calculate bezier curve path
+const getBezierPath = (start: { x: number; y: number }, end: { x: number; y: number }) => {
+  const midX = (start.x + end.x) / 2;
+  const controlPoint1 = { x: midX, y: start.y };
+  const controlPoint2 = { x: midX, y: end.y };
+  
+  return `M ${start.x} ${start.y} C ${controlPoint1.x} ${controlPoint1.y}, ${controlPoint2.x} ${controlPoint2.y}, ${end.x} ${end.y}`;
+};
+
+// Helper function to check if two lines intersect
+const doLinesIntersect = (line1: { start: { x: number; y: number }, end: { x: number; y: number } },
+                         line2: { start: { x: number; y: number }, end: { x: number; y: number } }) => {
+  const denominator = ((line2.end.y - line2.start.y) * (line1.end.x - line1.start.x)) - 
+                     ((line2.end.x - line2.start.x) * (line1.end.y - line1.start.y));
+  
+  if (denominator === 0) return false;
+  
+  const ua = (((line2.end.x - line2.start.x) * (line1.start.y - line2.start.y)) - 
+             ((line2.end.y - line2.start.y) * (line1.start.x - line2.start.x))) / denominator;
+  const ub = (((line1.end.x - line1.start.x) * (line1.start.y - line2.start.y)) - 
+             ((line1.end.y - line1.start.y) * (line1.start.x - line2.start.x))) / denominator;
+  
+  return ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1;
+};
+
 export default function Routing({ config, onConfigChange }: RoutingProps) {
   const [dragging, setDragging] = React.useState<{ from: string; type: string } | null>(null);
+  const [tempConnection, setTempConnection] = React.useState<{ x: number; y: number } | null>(null);
+  const [hoveredConnection, setHoveredConnection] = React.useState<{ from: string; to: string } | null>(null);
   const [showNewComponentModal, setShowNewComponentModal] = React.useState(false);
   const [newComponentType, setNewComponentType] = React.useState<'oscillator' | 'filter'>('oscillator');
 
   const handleDragStart = (id: string, type: string) => {
     setDragging({ from: id, type });
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+    if (dragging) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      setTempConnection({
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+      });
+    }
+  };
+
+  const handleDragEnd = () => {
+    setDragging(null);
+    setTempConnection(null);
   };
 
   const handleDrop = (toId: string) => {
@@ -39,6 +81,7 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
     });
 
     setDragging(null);
+    setTempConnection(null);
   };
 
   const handleDeleteConnection = (from: string, to: string) => {
@@ -98,83 +141,133 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
   // Calculate positions for the graph layout
   const calculatePositions = () => {
     const positions: Record<string, { x: number; y: number }> = {};
-    let x = 0;
     let y = 0;
 
     // Position oscillators
     Object.keys(config.components.oscillators).forEach(id => {
       positions[id] = { x: 0, y: y };
-      y += 100;
+      y += 50; // Reduced spacing
     });
 
     // Position filters
     y = 0;
     Object.keys(config.components.filters).forEach(id => {
-      positions[id] = { x: 200, y: y };
-      y += 100;
+      positions[id] = { x: 150, y: y }; // Reduced horizontal spacing
+      y += 50;
     });
 
     // Position output
-    positions['output'] = { x: 400, y: Math.max(y - 100, 0) };
+    positions['output'] = { x: 300, y: Math.max(y - 50, 0) }; // Reduced horizontal spacing
 
     return positions;
   };
 
   const positions = calculatePositions();
 
+  // Calculate connection paths with bezier curves
+  const getConnectionPaths = () => {
+    const paths: { path: string; from: string; to: string }[] = [];
+    const lines: { start: { x: number; y: number }, end: { x: number; y: number } }[] = [];
+
+    config.routing.forEach((conn, index) => {
+      const fromPos = positions[conn.from];
+      const toPos = positions[conn.to];
+      if (!fromPos || !toPos) return;
+
+      const start = { x: fromPos.x + 50, y: fromPos.y + 25 };
+      const end = { x: toPos.x, y: toPos.y + 25 };
+
+      // Check for intersections with existing lines
+      const newLine = { start, end };
+      const hasIntersection = lines.some(line => doLinesIntersect(line, newLine));
+
+      if (!hasIntersection) {
+        lines.push(newLine);
+        paths.push({
+          path: getBezierPath(start, end),
+          from: conn.from,
+          to: conn.to
+        });
+      }
+    });
+
+    return paths;
+  };
+
+  const connectionPaths = getConnectionPaths();
+
   return (
-    <div className="p-4">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold">Routing</h2>
-        <div className="flex gap-2">
+    <div className="p-2">
+      <div className="flex justify-between items-center mb-2">
+        <h2 className="text-lg font-bold">Routing</h2>
+        <div className="flex gap-1">
           <button
             onClick={() => handleAddComponent('oscillator')}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            className="px-2 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
           >
-            Add Oscillator
+            + Osc
           </button>
           <button
             onClick={() => handleAddComponent('filter')}
-            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+            className="px-2 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
           >
-            Add Filter
+            + Filter
           </button>
         </div>
       </div>
 
       {/* Graph Layout */}
-      <div className="relative h-[400px] border border-gray-700 rounded-lg bg-gray-800/50">
-        {/* Connections */}
-        {config.routing.map((conn, index) => {
-          const fromPos = positions[conn.from];
-          const toPos = positions[conn.to];
-          if (!fromPos || !toPos) return null;
+      <div 
+        className="relative h-[200px] border border-gray-700 rounded-lg bg-gray-800/50"
+        onDragOver={e => e.preventDefault()}
+        onDrag={handleDrag}
+        onDragEnd={handleDragEnd}
+      >
+        {/* SVG for connections */}
+        <svg className="absolute w-full h-full" style={{ pointerEvents: 'all' }}>
+          {config.routing.map((conn, index) => {
+            const fromPos = positions[conn.from];
+            const toPos = positions[conn.to];
+            if (!fromPos || !toPos) return null;
 
-          return (
-            <div
-              key={index}
-              className="absolute"
-              style={{
-                left: fromPos.x + 50,
-                top: fromPos.y + 25,
-                width: toPos.x - fromPos.x,
-                height: 2,
-                backgroundColor: '#4B5563',
-                transform: `rotate(${Math.atan2(toPos.y - fromPos.y, toPos.x - fromPos.x)}rad)`,
-                transformOrigin: 'left center',
-              }}
-            >
-              <div className="absolute -right-2 -top-2">
-                <button
+            const start = { x: fromPos.x + 40, y: fromPos.y + 20 };
+            const end = { x: toPos.x, y: toPos.y + 20 };
+            const path = getBezierPath(start, end);
+
+            return (
+              <g key={index} style={{ pointerEvents: 'all' }}>
+                <path
+                  d={path}
+                  stroke={hoveredConnection?.from === conn.from && hoveredConnection?.to === conn.to ? "#6B7280" : "#4B5563"}
+                  strokeWidth="4"
+                  fill="none"
+                  onMouseEnter={() => setHoveredConnection({ from: conn.from, to: conn.to })}
+                  onMouseLeave={() => setHoveredConnection(null)}
                   onClick={() => handleDeleteConnection(conn.from, conn.to)}
-                  className="text-red-500 hover:text-red-700"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-          );
-        })}
+                  style={{ cursor: 'pointer' }}
+                />
+                <circle
+                  cx={toPos.x}
+                  cy={toPos.y + 20}
+                  r="4"
+                  fill="#4B5563"
+                />
+              </g>
+            );
+          })}
+          {tempConnection && dragging && (
+            <path
+              d={getBezierPath(
+                { x: positions[dragging.from].x + 40, y: positions[dragging.from].y + 20 },
+                tempConnection
+              )}
+              stroke="#6B7280"
+              strokeWidth="2"
+              fill="none"
+              strokeDasharray="4"
+            />
+          )}
+        </svg>
 
         {/* Components */}
         {Object.entries(positions).map(([id, pos]) => (
@@ -184,7 +277,7 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
             onDragStart={() => handleDragStart(id, id.startsWith('osc') ? 'oscillator' : 'filter')}
             onDragOver={e => e.preventDefault()}
             onDrop={() => handleDrop(id)}
-            className={`absolute w-[100px] h-[50px] rounded-lg cursor-move ${
+            className={`absolute w-[80px] h-[40px] rounded-lg cursor-move ${
               id === 'output' ? getComponentColor('output') : 
               id.startsWith('osc') ? getComponentColor('oscillator') : 
               getComponentColor('filter')
@@ -194,7 +287,7 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
               top: pos.y,
             }}
           >
-            <div className="p-2 text-center text-sm font-quantico">
+            <div className="p-1 text-center text-xs font-quantico">
               {id}
             </div>
           </div>
