@@ -8,6 +8,7 @@ interface KnobProps {
     label: string;
     onChange: (value: number) => void;
     size?: 'sm' | 'md' | 'lg';
+    formatLabel?: (value: number) => string;
 }
 
 export const Knob: React.FC<KnobProps> = ({
@@ -18,6 +19,7 @@ export const Knob: React.FC<KnobProps> = ({
     label,
     onChange,
     size = 'md',
+    formatLabel,
 }) => {
     const [isDragging, setIsDragging] = useState(false);
     const [startY, setStartY] = useState(0);
@@ -85,7 +87,9 @@ export const Knob: React.FC<KnobProps> = ({
             </div>
             <div className="mt-0.5 text-center font-quantico">
                 <div className="text-[10px] font-bold">{label}</div>
-                <div className="text-[8px] text-gray-400">{value.toFixed(step < 1 ? 2 : 0)}</div>
+                <div className="text-[8px] text-gray-400">
+                    {formatLabel ? formatLabel(value) : value.toFixed(step < 1 ? 2 : 0)}
+                </div>
             </div>
         </div>
     );

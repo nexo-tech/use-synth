@@ -55,8 +55,37 @@ export const Filter: React.FC<FilterProps> = ({ config, onConfigChange }) => {
     onConfigChange({ ...config, type });
   };
 
-  const handleFrequencyChange = (frequency: number) => {
-    onConfigChange({ ...config, frequency });
+  // Convert linear value (0-1) to logarithmic frequency (20-20000)
+  const linearToLog = (value: number) => {
+    const minFreq = 20;
+    const maxFreq = 20000;
+    const minLog = Math.log10(minFreq);
+    const maxLog = Math.log10(maxFreq);
+    const logValue = minLog + (maxLog - minLog) * value;
+    return Math.pow(10, logValue);
+  };
+
+  // Convert logarithmic frequency to linear value (0-1)
+  const logToLinear = (freq: number) => {
+    const minFreq = 20;
+    const maxFreq = 20000;
+    const minLog = Math.log10(minFreq);
+    const maxLog = Math.log10(maxFreq);
+    const logFreq = Math.log10(freq);
+    return (logFreq - minLog) / (maxLog - minLog);
+  };
+
+  const handleFrequencyChange = (value: number) => {
+    const freq = linearToLog(value);
+    onConfigChange({ ...config, frequency: freq });
+  };
+
+  // Format frequency for display
+  const formatFrequency = (freq: number) => {
+    if (freq >= 1000) {
+      return `${(freq / 1000).toFixed(1)}k`;
+    }
+    return Math.round(freq).toString();
   };
 
   const handleQChange = (Q: number) => {
@@ -83,12 +112,13 @@ export const Filter: React.FC<FilterProps> = ({ config, onConfigChange }) => {
         <div className="flex justify-center gap-3 mt-2">
           <Knob
             label="Freq"
-            value={config.frequency ?? 1000}
-            min={20}
-            max={20000}
-            step={1}
+            value={logToLinear(config.frequency ?? 1000)}
+            min={0}
+            max={1}
+            step={0.001}
             size="sm"
             onChange={handleFrequencyChange}
+            formatLabel={(value) => formatFrequency(linearToLog(value)) + 'Hz'}
           />
           
           <Knob
