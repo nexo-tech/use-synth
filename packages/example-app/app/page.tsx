@@ -1014,7 +1014,7 @@ export default function OscillatorPage() {
         </div>
 
         {/* Routing Section */}
-        <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
+        <div className="bg-gray-800/50 rounded-xl px-1 pb-1 pt-2 border-gray-700">
           <Routing config={currentConfig} onConfigChange={handleConfigChange} />
         </div>
 

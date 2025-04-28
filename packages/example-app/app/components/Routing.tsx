@@ -12,6 +12,11 @@ const getBezierPath = (start: { x: number; y: number }, end: { x: number; y: num
   const controlPoint1 = { x: midX, y: start.y };
   const controlPoint2 = { x: midX, y: end.y };
 
+  // Add some curve to make the path more visible
+  const curveOffset = Math.min(50, Math.abs(end.x - start.x) / 2);
+  controlPoint1.x += curveOffset;
+  controlPoint2.x -= curveOffset;
+
   return `M ${start.x} ${start.y} C ${controlPoint1.x} ${controlPoint1.y}, ${controlPoint2.x} ${controlPoint2.y}, ${end.x} ${end.y}`;
 };
 
@@ -150,6 +155,7 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
   const handleMouseUp = () => {
     if (connecting && hoveredComponent) {
       handleConnect(connecting.from, hoveredComponent);
+      hasDragged.current = true;
     }
     setConnecting(null);
     setTempConnection(null);
@@ -302,8 +308,8 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
       const toPos = nodePositions[conn.to];
       if (!fromPos || !toPos) return;
 
-      const start = { x: fromPos.x + 40, y: fromPos.y + 20 };
-      const end = { x: toPos.x, y: toPos.y + 20 };
+      const start = { x: fromPos.x + 30, y: fromPos.y + 10 }; // Middle of the node
+      const end = { x: toPos.x, y: toPos.y + 10 }; // Middle of the target node
 
       // Calculate control points for a smoother curve
       const midX = (start.x + end.x) / 2;
@@ -319,11 +325,100 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
 
   const connectionPaths = getConnectionPaths();
 
+  const tidyLayout = () => {
+    const newPositions: Record<string, { x: number; y: number }> = {};
+    const gridSpacing = 150; // Increased spacing
+    const startX = 50;
+    const startY = 50;
+
+    // Group components by type
+    const envelopes = Object.keys(config.components.envelopes);
+    const oscillators = Object.keys(config.components.oscillators);
+    const filters = Object.keys(config.components.filters);
+
+    // Analyze connections to determine optimal placement
+    const connections = config.routing;
+    const nodeConnections: Record<string, { inputs: string[], outputs: string[] }> = {};
+
+    // Initialize connection tracking
+    [...envelopes, ...oscillators, ...filters, 'output'].forEach(id => {
+      nodeConnections[id] = { inputs: [], outputs: [] };
+    });
+
+    // Track connections
+    connections.forEach(conn => {
+      nodeConnections[conn.from].outputs.push(conn.to);
+      nodeConnections[conn.to].inputs.push(conn.from);
+    });
+
+    // Position envelopes first (leftmost)
+    envelopes.forEach((id, index) => {
+      newPositions[id] = {
+        x: startX,
+        y: startY + index * gridSpacing
+      };
+    });
+
+    // Position oscillators in second column, with vertical offset based on their envelope connections
+    oscillators.forEach((id, index) => {
+      const connectedEnvelopes = nodeConnections[id].inputs.filter(i => i.startsWith('env'));
+      let yOffset = 0;
+
+      if (connectedEnvelopes.length > 0) {
+        // Try to align with connected envelopes
+        const envIndex = envelopes.indexOf(connectedEnvelopes[0]);
+        if (envIndex !== -1) {
+          yOffset = (envIndex - index) * (gridSpacing / 3);
+        }
+      }
+
+      newPositions[id] = {
+        x: startX + gridSpacing,
+        y: startY + index * gridSpacing + yOffset
+      };
+    });
+
+    // Position filters in third column, with vertical offset based on their oscillator connections
+    filters.forEach((id, index) => {
+      const connectedOscs = nodeConnections[id].inputs.filter(i => i.startsWith('osc'));
+      let yOffset = 0;
+
+      if (connectedOscs.length > 0) {
+        // Try to align with connected oscillators
+        const oscIndex = oscillators.indexOf(connectedOscs[0]);
+        if (oscIndex !== -1) {
+          yOffset = (oscIndex - index) * (gridSpacing / 3);
+        }
+      }
+
+      newPositions[id] = {
+        x: startX + gridSpacing * 2,
+        y: startY + index * gridSpacing + yOffset
+      };
+    });
+
+    // Position output in the middle of the right side
+    newPositions['output'] = {
+      x: startX + gridSpacing * 3,
+      y: startY + Math.max(envelopes.length, oscillators.length, filters.length) * gridSpacing / 2
+    };
+
+    setNodePositions(newPositions);
+    setViewportOffset({ x: 0, y: 0 }); // Reset viewport
+  };
+
   return (
-    <div className="p-2">
+    <div >
       <div className="flex justify-between items-center mb-2">
         <h2 className="text-sm font-quantico text-gray-400">Routing</h2>
         <div className="flex gap-1">
+          <button
+            onClick={tidyLayout}
+            className="px-1.5 py-0.5 bg-gray-800 text-gray-300 rounded text-xs hover:bg-gray-700"
+            title="Arrange nodes in a clean grid layout"
+          >
+            Tidy
+          </button>
           <button
             onClick={() => handleAddComponent('oscillator')}
             className="px-1.5 py-0.5 bg-gray-800 text-gray-300 rounded text-xs hover:bg-gray-700"
@@ -354,9 +449,9 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
         onMouseDown={(e) => handleMouseDown(e)}
       >
         {/* SVG for connections */}
-        <svg 
-          className="absolute w-full h-full" 
-          style={{ 
+        <svg
+          className="absolute w-full h-full"
+          style={{
             pointerEvents: 'none',
             transform: `translate(${viewportOffset.x}px, ${viewportOffset.y}px)`
           }}
@@ -375,7 +470,7 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
               />
               <circle
                 cx={nodePositions[to].x}
-                cy={nodePositions[to].y + 10}
+                cy={nodePositions[to].y + 10} // Middle of the node
                 r="3"
                 fill="#374151"
               />
@@ -384,9 +479,9 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
           {tempConnection && connecting && (
             <path
               d={getBezierPath(
-                { x: nodePositions[connecting.from].x + 30, y: nodePositions[connecting.from].y + 10 },
+                { x: nodePositions[connecting.from].x + 30, y: nodePositions[connecting.from].y + 10 }, // Middle of the node
                 hoveredComponent ?
-                  { x: nodePositions[hoveredComponent].x, y: nodePositions[hoveredComponent].y + 10 } :
+                  { x: nodePositions[hoveredComponent].x, y: nodePositions[hoveredComponent].y + 10 } : // Middle of the target node
                   tempConnection
               )}
               stroke="#4B5563"
@@ -414,12 +509,11 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
                   setHoveredComponent(null);
                 }
               }}
-              className={`group absolute w-[60px] h-[20px] rounded cursor-move text-[10px] font-quantico ${
-                id === 'output' ? 'bg-gray-700' :
+              className={`group absolute w-[60px] h-[20px] rounded cursor-move text-[10px] font-quantico ${id === 'output' ? 'bg-gray-700' :
                 id.startsWith('osc') ? 'bg-blue-600/50' :
-                id.startsWith('fil') ? 'bg-green-600/50' :
-                'bg-purple-600/50'
-              } ${hoveredComponent === id ? 'ring-1 ring-white' : ''} ${draggingNode === id ? 'ring-1 ring-white shadow' : ''}`}
+                  id.startsWith('fil') ? 'bg-green-600/50' :
+                    'bg-purple-600/50'
+                } ${hoveredComponent === id ? 'ring-1 ring-white' : ''} ${draggingNode === id ? 'ring-1 ring-white shadow' : ''}`}
               style={{
                 left: pos.x,
                 top: pos.y,
