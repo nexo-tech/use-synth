@@ -289,7 +289,7 @@ class ADSREnvelope implements AudioEngineNode {
   config: EnvelopeConfig;
   engine: Engine2;
   outputs: AudioEngineNode[] = [];
-
+  gainNode: GainNode;  // Add gain node for the envelope
   setOutput(node: AudioEngineNode) {
     this.outputs.push(node);
   }
@@ -302,31 +302,27 @@ class ADSREnvelope implements AudioEngineNode {
     this.id = id || this.type.substring(0, 3) + ADSREnvelope.nextID++;
     this.config = config;
     this.engine = engine;
+    this.gainNode = this.engine.context.createGain();
+    this.gainNode.gain.value = 0; // Initialize with 0 gain
   }
 
-  handleStartNode(node: GainNode) {
+  start() {
     const now = this.engine.context.currentTime;
     console.log(`[ADSR ${this.id}] Starting envelope at time ${now}`, this.config);
-
-    node.gain.cancelScheduledValues(now);
-    node.gain.setValueAtTime(0, now);
-    node.gain.linearRampToValueAtTime(1.0, now + this.config.attack);
-    node.gain.linearRampToValueAtTime(
+    this.gainNode.gain.cancelScheduledValues(now);
+    this.gainNode.gain.setValueAtTime(0, now);
+    this.gainNode.gain.linearRampToValueAtTime(1.0, now + this.config.attack);
+    this.gainNode.gain.linearRampToValueAtTime(
       this.config.sustain,
       now + this.config.attack + this.config.decay
     );
   }
 
-  handleStopNode(gainNode: GainNode) {
+  stop() {
     const now = this.engine.context.currentTime;
-    console.log(`[ADSR ${this.id}] Stopping envelope at time ${now}`, {
-      currentGain: gainNode.gain.value,
-      releaseTime: this.config.release,
-    });
-
-    gainNode.gain.cancelScheduledValues(now);
-    gainNode.gain.setValueAtTime(gainNode.gain.value, now);
-    gainNode.gain.linearRampToValueAtTime(0, now + this.config.release);
+    this.gainNode.gain.cancelScheduledValues(now);
+    this.gainNode.gain.setValueAtTime(this.gainNode.gain.value, now);
+    this.gainNode.gain.linearRampToValueAtTime(0, now + this.config.release);
   }
 }
 
@@ -450,7 +446,8 @@ class OscillatorEngineNode implements AudioEngineNode {
     const envelope = this.inputs.find(node => node.type === 'adsr') as ADSREnvelope | undefined;
     if (envelope) {
       console.log(`[Osc ${this.id}] Applying envelope ${envelope.id}`);
-      envelope.handleStartNode(instance.adsrGain);
+      envelope.gainNode.connect(instance.adsrGain);
+      envelope.start();
     }
 
     instance.start();
@@ -478,7 +475,7 @@ class OscillatorEngineNode implements AudioEngineNode {
 
     if (envelope) {
       console.log(`[Osc ${this.id}] Applying envelope release`);
-      envelope.handleStopNode(instance.adsrGain);
+      envelope.stop();
     }
 
     // Schedule the cleanup after the release time
