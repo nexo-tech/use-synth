@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Knob } from './Knob';
-import { OscillatorConfig } from '../aaa2/page';
+import { OscillatorConfig } from '../page';
 interface WaveformSelectorProps {
     value: 'sine' | 'square' | 'sawtooth' | 'triangle';
     onChange: (value: 'sine' | 'square' | 'sawtooth' | 'triangle') => void;
