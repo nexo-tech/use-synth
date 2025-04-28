@@ -290,6 +290,8 @@ class ADSREnvelope implements AudioEngineNode {
   engine: Engine2;
   outputs: AudioEngineNode[] = [];
   gainNode: GainNode;  // Add gain node for the envelope
+  cv: ConstantSourceNode;  // NEW: 0-1 control signal for modulation
+
   setOutput(node: AudioEngineNode) {
     this.outputs.push(node);
   }
@@ -304,25 +306,42 @@ class ADSREnvelope implements AudioEngineNode {
     this.engine = engine;
     this.gainNode = this.engine.context.createGain();
     this.gainNode.gain.value = 0; // Initialize with 0 gain
+    // ---- constant DC source for the modulation matrix ----
+    this.cv = this.engine.context.createConstantSource();
+    this.cv.offset.value = 0;
+    this.cv.start();
   }
 
   start() {
     const now = this.engine.context.currentTime;
-    console.log(`[ADSR ${this.id}] Starting envelope at time ${now}`, this.config);
+    // amplitude
     this.gainNode.gain.cancelScheduledValues(now);
     this.gainNode.gain.setValueAtTime(0, now);
-    this.gainNode.gain.linearRampToValueAtTime(1.0, now + this.config.attack);
+    this.gainNode.gain.linearRampToValueAtTime(1, now + this.config.attack);
     this.gainNode.gain.linearRampToValueAtTime(
       this.config.sustain,
-      now + this.config.attack + this.config.decay
-    );
+      now + this.config.attack + this.config.decay);
+
+    // modulation CV (0-1)
+    this.cv.offset.cancelScheduledValues(now);
+    this.cv.offset.setValueAtTime(0, now);
+    this.cv.offset.linearRampToValueAtTime(1, now + this.config.attack);
+    this.cv.offset.linearRampToValueAtTime(
+      this.config.sustain,
+      now + this.config.attack + this.config.decay);
   }
 
   stop() {
     const now = this.engine.context.currentTime;
+    // amplitude
     this.gainNode.gain.cancelScheduledValues(now);
     this.gainNode.gain.setValueAtTime(this.gainNode.gain.value, now);
     this.gainNode.gain.linearRampToValueAtTime(0, now + this.config.release);
+
+    // modulation CV
+    this.cv.offset.cancelScheduledValues(now);
+    this.cv.offset.setValueAtTime(this.cv.offset.value, now);
+    this.cv.offset.linearRampToValueAtTime(0, now + this.config.release);
   }
 }
 
@@ -556,6 +575,7 @@ class Engine2 {
   _context: AudioContext;
   components: Map<string, AudioEngineNode> = new Map();
   private masterGain: MasterGain;
+  private modCords: { source: AudioNode; gain: GainNode }[] = [];
   private isResuming: boolean = false;
   private currentConfig: UseSynthConfig;
   private activeNotes: Map<string, { note: number; oscId: string; instanceId: string }> = new Map();
@@ -643,6 +663,7 @@ class Engine2 {
 
     if (instanceIds.size > 0) {
       this.keyToInstanceIds.set(key, instanceIds);
+      this.updateModulationMatrix();
       return Array.from(instanceIds)[0]; // Return first instance ID for backward compatibility
     }
 
@@ -685,25 +706,24 @@ class Engine2 {
 
   private updateModulationMatrix() {
     // Clear existing modulation connections
+    // -------- 1. clear old cords ----------
+    this.modCords.forEach(c => { try { c.source.disconnect(c.gain); } catch { } });
+    this.modCords = [];
     this.modulationSources.clear();
     this.modulationTargets.clear();
 
-    // Set up modulation sources (LFOs and envelopes)
-    Object.entries(this.currentConfig.components.lfos).forEach(([id, config]) => {
-      const lfo = this.context.createOscillator();
-      lfo.frequency.value = config.rate;
-      lfo.type = config.type as OscillatorType;
-      lfo.start();
-      this.modulationSources.set(id, lfo);
-    });
+    // // Set up modulation sources (LFOs and envelopes)
+    // Object.entries(this.currentConfig.components.lfos).forEach(([id, config]) => {
+    //   const lfo = this.context.createOscillator();
+    //   lfo.frequency.value = config.rate;
+    //   lfo.type = config.type as OscillatorType;
+    //   lfo.start();
+    //   this.modulationSources.set(id, lfo);
+    // });
 
     Object.entries(this.currentConfig.components.envelopes).forEach(([id, _]) => {
       const env = this.components.get(id) as ADSREnvelope;
-      if (env) {
-        // Create a gain node to represent the envelope output
-        const envGain = this.context.createGain();
-        this.modulationSources.set(id, envGain);
-      }
+      if (env) this.modulationSources.set(id, env.cv);   // REAL CV output
     });
 
     // Set up modulation targets
@@ -726,18 +746,13 @@ class Engine2 {
 
     // Apply modulation connections
     this.currentConfig.modulation.forEach(connection => {
-      const source = this.modulationSources.get(connection.sourceId);
-      const target = this.modulationTargets.get(connection.targetId);
-
-      if (source && target) {
-        // Create a gain node to control modulation amount
-        const gain = this.context.createGain();
-        gain.gain.value = connection.amount;
-
-        // Connect source to target through gain
-        source.connect(gain);
-        gain.connect(target);
-      }
+      const s = this.modulationSources.get(connection.sourceId);
+      const t = this.modulationTargets.get(connection.targetId);
+      if (!s || !t) return;
+      const g = this.context.createGain();
+      g.gain.value = connection.amount;      // -1…+1
+      s.connect(g); g.connect(t);
+      this.modCords.push({ source: s, gain: g });
     });
   }
 
