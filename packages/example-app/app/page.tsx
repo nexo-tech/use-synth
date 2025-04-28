@@ -60,7 +60,7 @@ class OscillatorEngineNodeInstance {
     // Create unison voices if configured
     const voices = config.unisonVoices || 1;
     const spread = config.unisonSpread || 0;
-    const detune = config.unisonDetune || 0;
+    const detune = config.detune || 0;
     const stereo = config.unisonStereo || 0;
     const phase = config.phase ?? 0;
 
@@ -90,9 +90,6 @@ class OscillatorEngineNodeInstance {
 
       // Configure voice
       osc.type = config.type;
-
-      // log voice detune
-      console.log(`[OscInstance] Creating voice ${i} with detune ${voiceDetune}`);
       osc.detune.value = voiceDetune;
 
       // Connect with phase delay
@@ -105,16 +102,6 @@ class OscillatorEngineNodeInstance {
 
       // Store voice with its phase
       this.voices.push({ osc, panner, gain, delay, phase: voicePhase });
-
-      console.log(`[OscInstance] Created voice ${i}`, {
-        detune: voiceDetune,
-        pan,
-        phase: voicePhase,
-        delayTime: delay.delayTime.value,
-        osc,
-        panner,
-        gain
-      });
     }
   }
 
@@ -163,7 +150,11 @@ class OscillatorEngineNodeInstance {
   }
 
   updateDetune(detune: number) {
+    console.log(`[OscInstance] Updating detune to ${detune} cents`);
     this.voices.forEach(voice => {
+      // Cancel any scheduled changes
+      voice.osc.detune.cancelScheduledValues(this.context.currentTime);
+      // Set the new detune value immediately
       voice.osc.detune.value = detune;
     });
   }
@@ -177,16 +168,15 @@ class OscillatorEngineNodeInstance {
 
     const currentVoices = this.voices.length;
     const targetVoices = unison.unisonVoices ?? 1;
-
-    // Store current frequencies and phases
-    const currentFreqs = this.voices.map(voice => voice.osc.frequency.value);
-    const currentPhases = this.voices.map(voice => voice.phase);
+    const spread = unison.unisonSpread ?? 0;
+    const detune = unison.detune ?? 0;
+    const stereo = unison.unisonStereo ?? 0;
 
     // Update spread and stereo for existing voices
     this.voices.forEach((voice, i) => {
       const position = targetVoices == 1 ? 0 : (i / (targetVoices - 1)) * 2 - 1; // -1 to 1
-      const voiceDetune = position * (unison.unisonSpread ?? 0) + (unison.unisonDetune ?? 0);
-      const pan = position * (unison.unisonStereo ?? 0);
+      const voiceDetune = position * spread + detune;
+      const pan = position * stereo;
 
       voice.osc.detune.value = voiceDetune;
       voice.panner.pan.value = pan;
@@ -196,8 +186,8 @@ class OscillatorEngineNodeInstance {
     if (targetVoices > currentVoices) {
       for (let i = currentVoices; i < targetVoices; i++) {
         const position = (i / (targetVoices - 1)) * 2 - 1;
-        const voiceDetune = position * (unison.unisonSpread ?? 0) + (unison.unisonDetune ?? 0);
-        const pan = position * (unison.unisonStereo ?? 0);
+        const voiceDetune = position * spread + detune;
+        const pan = position * stereo;
 
         // Create new voice nodes
         const osc = this.context.createOscillator();
@@ -211,8 +201,8 @@ class OscillatorEngineNodeInstance {
         panner.pan.value = pan;
 
         // Set frequency to match existing voices
-        if (currentFreqs.length > 0) {
-          osc.frequency.value = currentFreqs[0];
+        if (this.voices.length > 0) {
+          osc.frequency.value = this.voices[0].osc.frequency.value;
         }
 
         // Connect nodes
@@ -230,7 +220,7 @@ class OscillatorEngineNodeInstance {
           panner,
           gain,
           delay,
-          phase: currentPhases.length > 0 ? currentPhases[0] : Math.random() * 2 * Math.PI
+          phase: Math.random() * 2 * Math.PI
         });
       }
     }
@@ -249,7 +239,7 @@ class OscillatorEngineNodeInstance {
   }
 
   updateConfig() {
-    const newConfig = this.config
+    const newConfig = this.config;
     console.log(`[OscInstance] Updating config:`, newConfig);
 
     if (newConfig.detune !== undefined) {
@@ -497,7 +487,7 @@ class OscillatorEngineNode implements AudioEngineNode {
 
   updateConfig() {
     const newConfig = this.config
-    console.log(`[Osc ${this.id}] Updating config:`, newConfig);
+    console.log(`[Osc ${this.id}] Updating config1:`, newConfig);
 
     // Update all active instances
     this.instances.forEach((instance, instanceId) => {
@@ -510,6 +500,7 @@ class OscillatorEngineNode implements AudioEngineNode {
       if (newConfig.pitch !== undefined) {
         instance.updateFrequency();
       }
+
       if (newConfig.unisonVoices !== undefined) {
         instance.updateUnison(newConfig);
       }
@@ -839,13 +830,13 @@ export default function OscillatorPage() {
     const newSynth = new Engine2();
     synth.current = newSynth;
     newSynth.createFromConfig(baseConfig);
-    
+
     // Get the master gain node for the oscilloscope
     const master = newSynth.components.get('output') as MasterGain;
     if (master) {
       masterGainRef.current = master.gain;
     }
-    
+
     updateUI(x => x + 1);
 
     // Add keyboard event listeners
