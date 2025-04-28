@@ -55,6 +55,10 @@ export const Osc: React.FC<OscProps> = ({ config, onConfigChange }) => {
         onConfigChange({ level });
     };
 
+    const handlePitchChange = (pitch: number) => {
+        onConfigChange({ pitch });
+    };
+
     const handleUnisonVoicesChange = (voices: number) => {
         onConfigChange({ unisonVoices: voices });
     };
@@ -81,6 +85,16 @@ export const Osc: React.FC<OscProps> = ({ config, onConfigChange }) => {
                         step={0.01}
                         size="sm"
                         onChange={handleLevelChange}
+                    />
+
+                    <Knob
+                        label="Pitch"
+                        value={config.pitch ?? 0}
+                        min={-24}
+                        max={24}
+                        step={1}
+                        size="sm"
+                        onChange={handlePitchChange}
                     />
 
                     <Knob

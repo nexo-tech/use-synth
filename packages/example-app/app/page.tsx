@@ -18,6 +18,7 @@ export interface OscillatorConfig {
   type: 'sine' | 'square' | 'sawtooth' | 'triangle';
   frequency?: number;
   detune?: number;
+  pitch?: number;
   phase?: number;
   level?: number;
   // unison?: { voices: number; spread: number; detune?: number; stereo?: number };
@@ -42,12 +43,14 @@ class OscillatorEngineNodeInstance {
   adsrGain: GainNode;
   masterGain: GainNode;
   velocity: number;
+  baseFrequency: number;
 
   constructor(context: AudioContext, config: OscillatorConfig, velocity: number) {
     console.log('[OscInstance] Creating new oscillator instance with config:', config);
     this.context = context;
     this.config = config;
     this.velocity = velocity;
+    this.baseFrequency = 0; // Will be set when note is played
     // Create ADSR and master gain nodes
     this.adsrGain = context.createGain();
     this.masterGain = context.createGain();
@@ -116,10 +119,19 @@ class OscillatorEngineNodeInstance {
 
   setFrequency(freq: number) {
     console.log(`[OscInstance] Setting frequency to ${freq}Hz for all voices`);
+    this.baseFrequency = freq;
+    this.updateFrequency();
+  }
+
+  updateFrequency() {
+    const pitchOffset = this.config.pitch ?? 0;
+    const pitchMultiplier = Math.pow(2, pitchOffset / 12);
+    const finalFrequency = this.baseFrequency * pitchMultiplier;
+    
     this.voices.forEach(voice => {
-      voice.osc.frequency.value = freq;
+      voice.osc.frequency.value = finalFrequency;
       // Update delay time to maintain phase relationship
-      voice.delay.delayTime.value = voice.phase / (2 * Math.PI * freq);
+      voice.delay.delayTime.value = voice.phase / (2 * Math.PI * finalFrequency);
     });
   }
 
@@ -231,6 +243,30 @@ class OscillatorEngineNodeInstance {
         voice.panner.disconnect();
         voice.gain.disconnect();
         this.voices.pop();
+      }
+    }
+  }
+
+  updateConfig() {
+    const newConfig = this.config;
+    console.log(`[OscInstance] Updating config:`, newConfig);
+
+    if (newConfig.detune !== undefined) {
+      this.updateDetune(newConfig.detune);
+    }
+    if (newConfig.level !== undefined) {
+      this.updateLevel(newConfig.level);
+    }
+    if (newConfig.pitch !== undefined) {
+      this.updateFrequency();
+    }
+    if (newConfig.unisonVoices !== undefined) {
+      // Store current frequency before updating unison
+      const currentFreq = this.voices[0]?.osc.frequency.value;
+      this.updateUnison(newConfig);
+      // Restore frequency after unison update
+      if (currentFreq) {
+        this.setFrequency(currentFreq);
       }
     }
   }
@@ -469,6 +505,9 @@ class OscillatorEngineNode implements AudioEngineNode {
       }
       if (newConfig.level !== undefined) {
         instance.updateLevel(newConfig.level);
+      }
+      if (newConfig.pitch !== undefined) {
+        instance.updateFrequency();
       }
       if (newConfig.unisonVoices !== undefined) {
         // Store current frequency before updating unison
