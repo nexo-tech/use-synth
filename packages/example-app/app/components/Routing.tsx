@@ -11,23 +11,23 @@ const getBezierPath = (start: { x: number; y: number }, end: { x: number; y: num
   const midX = (start.x + end.x) / 2;
   const controlPoint1 = { x: midX, y: start.y };
   const controlPoint2 = { x: midX, y: end.y };
-  
+
   return `M ${start.x} ${start.y} C ${controlPoint1.x} ${controlPoint1.y}, ${controlPoint2.x} ${controlPoint2.y}, ${end.x} ${end.y}`;
 };
 
 // Helper function to check if two lines intersect
 const doLinesIntersect = (line1: { start: { x: number; y: number }, end: { x: number; y: number } },
-                         line2: { start: { x: number; y: number }, end: { x: number; y: number } }) => {
-  const denominator = ((line2.end.y - line2.start.y) * (line1.end.x - line1.start.x)) - 
-                     ((line2.end.x - line2.start.x) * (line1.end.y - line1.start.y));
-  
+  line2: { start: { x: number; y: number }, end: { x: number; y: number } }) => {
+  const denominator = ((line2.end.y - line2.start.y) * (line1.end.x - line1.start.x)) -
+    ((line2.end.x - line2.start.x) * (line1.end.y - line1.start.y));
+
   if (denominator === 0) return false;
-  
-  const ua = (((line2.end.x - line2.start.x) * (line1.start.y - line2.start.y)) - 
-             ((line2.end.y - line2.start.y) * (line1.start.x - line2.start.x))) / denominator;
-  const ub = (((line1.end.x - line1.start.x) * (line1.start.y - line2.start.y)) - 
-             ((line1.end.y - line1.start.y) * (line1.start.x - line2.start.x))) / denominator;
-  
+
+  const ua = (((line2.end.x - line2.start.x) * (line1.start.y - line2.start.y)) -
+    ((line2.end.y - line2.start.y) * (line1.start.x - line2.start.x))) / denominator;
+  const ub = (((line1.end.x - line1.start.x) * (line1.start.y - line2.start.y)) -
+    ((line1.end.y - line1.start.y) * (line1.start.x - line2.start.x))) / denominator;
+
   return ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1;
 };
 
@@ -41,6 +41,7 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
   const [nodePositions, setNodePositions] = React.useState<Record<string, { x: number; y: number }>>({});
   const [draggingNode, setDraggingNode] = React.useState<string | null>(null);
   const [dragStart, setDragStart] = React.useState<{ x: number; y: number } | null>(null);
+  const [refreshID, setRefreshID] = React.useState(0);
 
   // Initialize node positions on mount and when components change
   React.useEffect(() => {
@@ -87,7 +88,7 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
       const rect = e.currentTarget.getBoundingClientRect();
       const newX = e.clientX - rect.left - dragStart.x;
       const newY = e.clientY - rect.top - dragStart.y;
-      
+
       setNodePositions(prev => ({
         ...prev,
         [draggingNode]: {
@@ -103,7 +104,7 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
     const nodeRect = e.currentTarget.getBoundingClientRect();
     const offsetX = e.clientX - nodeRect.left;
     const offsetY = e.clientY - nodeRect.top;
-    
+
     setDraggingNode(id);
     setDragStart({
       x: offsetX,
@@ -170,6 +171,20 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
       newId = `${prefix}${index}`;
     }
 
+    // Calculate the bottom position based on existing components
+    let maxY = 50; // Start with initial Y position
+    Object.values(nodePositions).forEach(pos => {
+      maxY = Math.max(maxY, pos.y + 100); // Add 100 for spacing
+    });
+
+    // Set the X position based on component type
+    let xPos = 50;
+    if (type === 'filter') {
+      xPos = 200;
+    } else if (type === 'envelope') {
+      xPos = 350;
+    }
+
     if (type === 'oscillator') {
       newConfig.components.oscillators[newId] = {
         type: 'sine',
@@ -190,12 +205,18 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
       };
     }
 
+    // Update node positions with the new component
+    setNodePositions(prev => ({
+      ...prev,
+      [newId]: { x: xPos, y: maxY }
+    }));
+
     onConfigChange(newConfig);
   };
 
   const handleDeleteComponent = (id: string) => {
     const newConfig = { ...config };
-    
+
     // Remove the component from its respective section
     if (id.startsWith('osc')) {
       delete newConfig.components.oscillators[id];
@@ -209,6 +230,12 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
     newConfig.routing = newConfig.routing.filter(
       conn => conn.from !== id && conn.to !== id
     );
+
+    setNodePositions(prev => {
+      const newPositions = { ...prev };
+      delete newPositions[id];
+      return newPositions;
+    });
 
     onConfigChange(newConfig);
   };
@@ -281,7 +308,7 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
       </div>
 
       {/* Graph Layout */}
-      <div 
+      <div
         className="relative h-[400px] border border-gray-700 rounded-lg bg-gray-800/50 overflow-hidden"
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -313,8 +340,8 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
             <path
               d={getBezierPath(
                 { x: nodePositions[connecting.from].x + 40, y: nodePositions[connecting.from].y + 20 },
-                hoveredComponent ? 
-                  { x: nodePositions[hoveredComponent].x, y: nodePositions[hoveredComponent].y + 20 } : 
+                hoveredComponent ?
+                  { x: nodePositions[hoveredComponent].x, y: nodePositions[hoveredComponent].y + 20 } :
                   tempConnection
               )}
               stroke="#6B7280"
@@ -345,12 +372,11 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
                 setHoveredComponent(null);
               }
             }}
-            className={`group absolute w-[80px] h-[40px] rounded-lg cursor-move ${
-              id === 'output' ? getComponentColor('output') : 
-              id.startsWith('osc') ? getComponentColor('oscillator') : 
-              id.startsWith('fil') ? getComponentColor('filter') : 
-              getComponentColor('envelope')
-            } ${hoveredComponent === id ? 'ring-2 ring-white' : ''} ${draggingNode === id ? 'ring-2 ring-white shadow-lg' : ''}`}
+            className={`group absolute w-[80px] h-[40px] rounded-lg cursor-move ${id === 'output' ? getComponentColor('output') :
+              id.startsWith('osc') ? getComponentColor('oscillator') :
+                id.startsWith('fil') ? getComponentColor('filter') :
+                  getComponentColor('envelope')
+              } ${hoveredComponent === id ? 'ring-2 ring-white' : ''} ${draggingNode === id ? 'ring-2 ring-white shadow-lg' : ''}`}
             style={{
               left: pos.x,
               top: pos.y,

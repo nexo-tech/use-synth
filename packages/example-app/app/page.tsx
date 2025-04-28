@@ -766,9 +766,11 @@ const baseConfig: UseSynthConfig = {
     },
   },
   routing: [
-    { from: 'osc1', to: 'env1' },
+    { from: 'env1', to: 'osc1' },
+    { from: 'env1', to: 'osc2' },
     { from: 'fil1', to: 'output' },
-    { from: 'osc2', to: 'env1' }
+    { from: 'osc1', to: 'fil1' },
+    { from: 'osc2', to: 'fil1' }
   ],
 };
 
