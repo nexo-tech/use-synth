@@ -3,6 +3,7 @@
 import React from 'react';
 import Osc from './components/Osc';
 import Filter from './components/Filter';
+import Oscilloscope from './components/Oscilloscope';
 
 interface EngineNode {
   type: string;
@@ -248,7 +249,7 @@ class OscillatorEngineNodeInstance {
   }
 
   updateConfig() {
-    const newConfig = this.config;
+    const newConfig = this.config
     console.log(`[OscInstance] Updating config:`, newConfig);
 
     if (newConfig.detune !== undefined) {
@@ -770,6 +771,7 @@ export default function OscillatorPage() {
   const synth = React.useRef<Engine2 | null>(null);
   const [currentOctave, setCurrentOctave] = React.useState(4); // Middle C is C4
   const [, updateUI] = React.useState(0)
+  const masterGainRef = React.useRef<GainNode | null>(null);
 
   const activeNotesRef = React.useRef<Set<string>>(new Set());
   const currentOctaveRef = React.useRef(4);
@@ -837,7 +839,14 @@ export default function OscillatorPage() {
     const newSynth = new Engine2();
     synth.current = newSynth;
     newSynth.createFromConfig(baseConfig);
-    updateUI(x => x + 1)
+    
+    // Get the master gain node for the oscilloscope
+    const master = newSynth.components.get('output') as MasterGain;
+    if (master) {
+      masterGainRef.current = master.gain;
+    }
+    
+    updateUI(x => x + 1);
 
     // Add keyboard event listeners
     window.addEventListener('keydown', handleKeyDown);
@@ -911,6 +920,18 @@ export default function OscillatorPage() {
             />
           </div>
         ))}
+
+        {masterGainRef.current && (
+          <div className="mt-4">
+            <Oscilloscope
+              audioNode={masterGainRef.current}
+              width={400}
+              height={100}
+              backgroundColor="#1a1a1a"
+              lineColor="#00ff00"
+            />
+          </div>
+        )}
       </div>
 
       <div className="mt-8 flex flex-col items-center gap-4">
