@@ -32,18 +32,15 @@ const doLinesIntersect = (line1: { start: { x: number; y: number }, end: { x: nu
 };
 
 export default function Routing({ config, onConfigChange }: RoutingProps) {
-  const [dragging, setDragging] = React.useState<{ from: string; type: string } | null>(null);
+  const [connecting, setConnecting] = React.useState<{ from: string; type: string } | null>(null);
   const [tempConnection, setTempConnection] = React.useState<{ x: number; y: number } | null>(null);
   const [hoveredConnection, setHoveredConnection] = React.useState<{ from: string; to: string } | null>(null);
+  const [hoveredComponent, setHoveredComponent] = React.useState<string | null>(null);
   const [showNewComponentModal, setShowNewComponentModal] = React.useState(false);
   const [newComponentType, setNewComponentType] = React.useState<'oscillator' | 'filter'>('oscillator');
 
-  const handleDragStart = (id: string, type: string) => {
-    setDragging({ from: id, type });
-  };
-
-  const handleDrag = (e: React.DragEvent) => {
-    if (dragging) {
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (connecting) {
       const rect = e.currentTarget.getBoundingClientRect();
       setTempConnection({
         x: e.clientX - rect.left,
@@ -52,23 +49,25 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
     }
   };
 
-  const handleDragEnd = () => {
-    setDragging(null);
+  const handleMouseUp = () => {
+    if (connecting && hoveredComponent) {
+      handleConnect(connecting.from, hoveredComponent);
+    }
+    setConnecting(null);
     setTempConnection(null);
+    setHoveredComponent(null);
   };
 
-  const handleDrop = (toId: string) => {
-    if (!dragging) return;
-
+  const handleConnect = (from: string, to: string) => {
     const newRouting = [...config.routing];
     const existingConnection = newRouting.find(
-      conn => conn.from === dragging.from && conn.to === toId
+      conn => conn.from === from && conn.to === to
     );
 
     if (!existingConnection) {
       newRouting.push({
-        from: dragging.from,
-        to: toId,
+        from,
+        to,
         mix: 1,
         gain: 1,
         pan: 0
@@ -79,9 +78,6 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
       ...config,
       routing: newRouting
     });
-
-    setDragging(null);
-    setTempConnection(null);
   };
 
   const handleDeleteConnection = (from: string, to: string) => {
@@ -219,9 +215,9 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
       {/* Graph Layout */}
       <div 
         className="relative h-[200px] border border-gray-700 rounded-lg bg-gray-800/50"
-        onDragOver={e => e.preventDefault()}
-        onDrag={handleDrag}
-        onDragEnd={handleDragEnd}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
       >
         {/* SVG for connections */}
         <svg className="absolute w-full h-full" style={{ pointerEvents: 'all' }}>
@@ -255,11 +251,13 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
               </g>
             );
           })}
-          {tempConnection && dragging && (
+          {tempConnection && connecting && (
             <path
               d={getBezierPath(
-                { x: positions[dragging.from].x + 40, y: positions[dragging.from].y + 20 },
-                tempConnection
+                { x: positions[connecting.from].x + 40, y: positions[connecting.from].y + 20 },
+                hoveredComponent ? 
+                  { x: positions[hoveredComponent].x, y: positions[hoveredComponent].y + 20 } : 
+                  tempConnection
               )}
               stroke="#6B7280"
               strokeWidth="2"
@@ -273,15 +271,26 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
         {Object.entries(positions).map(([id, pos]) => (
           <div
             key={id}
-            draggable={id !== 'output'}
-            onDragStart={() => handleDragStart(id, id.startsWith('osc') ? 'oscillator' : 'filter')}
-            onDragOver={e => e.preventDefault()}
-            onDrop={() => handleDrop(id)}
-            className={`absolute w-[80px] h-[40px] rounded-lg cursor-move ${
+            onClick={() => {
+              if (!connecting && id !== 'output') {
+                setConnecting({ from: id, type: id.startsWith('osc') ? 'oscillator' : 'filter' });
+              }
+            }}
+            onMouseEnter={() => {
+              if (connecting && id !== connecting.from) {
+                setHoveredComponent(id);
+              }
+            }}
+            onMouseLeave={() => {
+              if (connecting) {
+                setHoveredComponent(null);
+              }
+            }}
+            className={`absolute w-[80px] h-[40px] rounded-lg cursor-pointer ${
               id === 'output' ? getComponentColor('output') : 
               id.startsWith('osc') ? getComponentColor('oscillator') : 
               getComponentColor('filter')
-            }`}
+            } ${hoveredComponent === id ? 'ring-2 ring-white' : ''}`}
             style={{
               left: pos.x,
               top: pos.y,
