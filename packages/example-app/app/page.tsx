@@ -4,6 +4,7 @@ import React from 'react';
 import Osc from './components/Osc';
 import Filter from './components/Filter';
 import Oscilloscope from './components/Oscilloscope';
+import Routing from './components/Routing';
 
 interface EngineNode {
   type: string;
@@ -239,7 +240,7 @@ class OscillatorEngineNodeInstance {
   }
 
   updateConfig() {
-    const newConfig = this.config;
+    const newConfig = this.config
     console.log(`[OscInstance] Updating config:`, newConfig);
 
     if (newConfig.detune !== undefined) {
@@ -733,6 +734,16 @@ const baseConfig: UseSynthConfig = {
         unisonStereo: 50,
         envelope: 'amp',
       },
+      b: {
+        type: 'sawtooth',
+        detune: -7,
+        level: 0.5,
+        pitch: 12,
+        unisonVoices: 5,
+        unisonSpread: 25,
+        unisonStereo: 50,
+        envelope: 'amp',
+      },
     },
     filters: {
       lpf: {
@@ -754,15 +765,17 @@ const baseConfig: UseSynthConfig = {
   },
   routing: [
     { from: 'main', to: 'lpf' },
-    { from: 'lpf', to: 'output' }
+    { from: 'lpf', to: 'output' },
+    { from: 'b', to: 'output' }
   ],
 };
 
 export default function OscillatorPage() {
   const synth = React.useRef<Engine2 | null>(null);
-  const [currentOctave, setCurrentOctave] = React.useState(4); // Middle C is C4
-  const [, updateUI] = React.useState(0)
+  const [currentOctave, setCurrentOctave] = React.useState(4);
+  const [, updateUI] = React.useState(0);
   const masterGainRef = React.useRef<GainNode | null>(null);
+  const [currentConfig, setCurrentConfig] = React.useState<UseSynthConfig>(baseConfig);
 
   const activeNotesRef = React.useRef<Set<string>>(new Set());
   const currentOctaveRef = React.useRef(4);
@@ -887,7 +900,13 @@ export default function OscillatorPage() {
     }
   };
 
-  const currentConfig = synth.current?.getCurrentConfig()
+  const handleConfigChange = (newConfig: UseSynthConfig) => {
+    setCurrentConfig(newConfig);
+    if (synth.current) {
+      synth.current.createFromConfig(newConfig);
+      updateUI(x => x + 1);
+    }
+  };
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-8 bg-gray-950 text-white">
@@ -923,6 +942,10 @@ export default function OscillatorPage() {
             />
           </div>
         )}
+      </div>
+
+      <div className="mt-8 w-full max-w-4xl">
+        <Routing config={currentConfig} onConfigChange={handleConfigChange} />
       </div>
 
       <div className="mt-8 flex flex-col items-center gap-4">
