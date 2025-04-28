@@ -41,6 +41,9 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
   const [nodePositions, setNodePositions] = React.useState<Record<string, { x: number; y: number }>>({});
   const [draggingNode, setDraggingNode] = React.useState<string | null>(null);
   const [dragStart, setDragStart] = React.useState<{ x: number; y: number } | null>(null);
+  const [viewportOffset, setViewportOffset] = React.useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = React.useState(false);
+  const [panStart, setPanStart] = React.useState<{ x: number; y: number } | null>(null);
   const hasDragged = React.useRef(false);
   const [refreshID, setRefreshID] = React.useState(0);
 
@@ -79,16 +82,24 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
   }, [config.components]);
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (connecting) {
+    if (isPanning && panStart) {
+      const dx = e.clientX - panStart.x;
+      const dy = e.clientY - panStart.y;
+      setViewportOffset(prev => ({
+        x: prev.x + dx,
+        y: prev.y + dy
+      }));
+      setPanStart({ x: e.clientX, y: e.clientY });
+    } else if (connecting) {
       const rect = e.currentTarget.getBoundingClientRect();
       setTempConnection({
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top
+        x: e.clientX - rect.left - viewportOffset.x,
+        y: e.clientY - rect.top - viewportOffset.y
       });
     } else if (draggingNode && dragStart) {
       const rect = e.currentTarget.getBoundingClientRect();
-      const newX = e.clientX - rect.left - dragStart.x;
-      const newY = e.clientY - rect.top - dragStart.y;
+      const newX = e.clientX - rect.left - dragStart.x - viewportOffset.x;
+      const newY = e.clientY - rect.top - dragStart.y - viewportOffset.y;
 
       hasDragged.current = true;
       setConnecting(null)
@@ -103,18 +114,29 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
     }
   };
 
-  const handleMouseDown = (e: React.MouseEvent, id: string) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const nodeRect = e.currentTarget.getBoundingClientRect();
-    const offsetX = e.clientX - nodeRect.left;
-    const offsetY = e.clientY - nodeRect.top;
+  const handleMouseDown = (e: React.MouseEvent, id?: string) => {
+    // If clicking on a node, don't start panning
+    if (id) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const nodeRect = e.currentTarget.getBoundingClientRect();
+      const offsetX = e.clientX - nodeRect.left;
+      const offsetY = e.clientY - nodeRect.top;
 
-    setDraggingNode(id);
-    setDragStart({
-      x: offsetX,
-      y: offsetY
-    });
-    hasDragged.current = false;
+      setDraggingNode(id);
+      setDragStart({
+        x: offsetX,
+        y: offsetY
+      });
+      hasDragged.current = false;
+      return;
+    }
+
+    // Only start panning if clicking on the background
+    const target = e.target as HTMLElement;
+    if (target === e.currentTarget || target.classList.contains('pan-area')) {
+      setIsPanning(true);
+      setPanStart({ x: e.clientX, y: e.clientY });
+    }
   };
 
   const handleClick = (e: React.MouseEvent, id: string) => {
@@ -134,6 +156,8 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
     setHoveredComponent(null);
     setDraggingNode(null);
     setDragStart(null);
+    setIsPanning(false);
+    setPanStart(null);
     setRefreshID(prev => prev + 1);
   };
 
@@ -298,44 +322,51 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
   return (
     <div className="p-2">
       <div className="flex justify-between items-center mb-2">
-        <h2 className="text-lg font-bold">Routing</h2>
+        <h2 className="text-sm font-quantico text-gray-400">Routing</h2>
         <div className="flex gap-1">
           <button
             onClick={() => handleAddComponent('oscillator')}
-            className="px-2 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+            className="px-1.5 py-0.5 bg-gray-800 text-gray-300 rounded text-xs hover:bg-gray-700"
           >
-            + Osc
+            +Osc
           </button>
           <button
             onClick={() => handleAddComponent('filter')}
-            className="px-2 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-700"
+            className="px-1.5 py-0.5 bg-gray-800 text-gray-300 rounded text-xs hover:bg-gray-700"
           >
-            + Filter
+            +Filter
           </button>
           <button
             onClick={() => handleAddComponent('envelope')}
-            className="px-2 py-1 bg-purple-600 text-white rounded text-sm hover:bg-purple-700"
+            className="px-1.5 py-0.5 bg-gray-800 text-gray-300 rounded text-xs hover:bg-gray-700"
           >
-            + ADSR
+            +ADSR
           </button>
         </div>
       </div>
 
       {/* Graph Layout */}
       <div
-        className="relative h-[400px] border border-gray-700 rounded-lg bg-gray-800/50 overflow-hidden"
+        className="relative h-[200px] border border-gray-700 rounded-lg bg-gray-800/50 overflow-hidden cursor-grab active:cursor-grabbing pan-area"
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
+        onMouseDown={(e) => handleMouseDown(e)}
       >
         {/* SVG for connections */}
-        <svg className="absolute w-full h-full" style={{ pointerEvents: 'all' }}>
+        <svg 
+          className="absolute w-full h-full" 
+          style={{ 
+            pointerEvents: 'none',
+            transform: `translate(${viewportOffset.x}px, ${viewportOffset.y}px)`
+          }}
+        >
           {connectionPaths.map(({ path, from, to }, index) => (
             <g key={index} style={{ pointerEvents: 'all' }}>
               <path
                 d={path}
-                stroke={hoveredConnection?.from === from && hoveredConnection?.to === to ? "#6B7280" : "#4B5563"}
-                strokeWidth="2"
+                stroke={hoveredConnection?.from === from && hoveredConnection?.to === to ? "#4B5563" : "#374151"}
+                strokeWidth="1.5"
                 fill="none"
                 onMouseEnter={() => setHoveredConnection({ from, to })}
                 onMouseLeave={() => setHoveredConnection(null)}
@@ -344,22 +375,22 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
               />
               <circle
                 cx={nodePositions[to].x}
-                cy={nodePositions[to].y + 20}
-                r="4"
-                fill="#4B5563"
+                cy={nodePositions[to].y + 10}
+                r="3"
+                fill="#374151"
               />
             </g>
           ))}
           {tempConnection && connecting && (
             <path
               d={getBezierPath(
-                { x: nodePositions[connecting.from].x + 40, y: nodePositions[connecting.from].y + 20 },
+                { x: nodePositions[connecting.from].x + 30, y: nodePositions[connecting.from].y + 10 },
                 hoveredComponent ?
-                  { x: nodePositions[hoveredComponent].x, y: nodePositions[hoveredComponent].y + 20 } :
+                  { x: nodePositions[hoveredComponent].x, y: nodePositions[hoveredComponent].y + 10 } :
                   tempConnection
               )}
-              stroke="#6B7280"
-              strokeWidth="2"
+              stroke="#4B5563"
+              strokeWidth="1.5"
               fill="none"
               strokeDasharray="4"
             />
@@ -367,47 +398,50 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
         </svg>
 
         {/* Components */}
-        {Object.entries(nodePositions).map(([id, pos]) => (
-          <div
-            key={id}
-            onMouseDown={(e) => handleMouseDown(e, id)}
-            onClick={(e) => handleClick(e, id)}
-            onMouseEnter={() => {
-              if (connecting && id !== connecting.from) {
-                setHoveredComponent(id);
-              }
-            }}
-            onMouseLeave={() => {
-              if (connecting) {
-                setHoveredComponent(null);
-              }
-            }}
-            className={`group absolute w-[80px] h-[40px] rounded-lg cursor-move ${id === 'output' ? getComponentColor('output') :
-              id.startsWith('osc') ? getComponentColor('oscillator') :
-                id.startsWith('fil') ? getComponentColor('filter') :
-                  getComponentColor('envelope')
-              } ${hoveredComponent === id ? 'ring-2 ring-white' : ''} ${draggingNode === id ? 'ring-2 ring-white shadow-lg' : ''}`}
-            style={{
-              left: pos.x,
-              top: pos.y,
-            }}
-          >
-            <div className="relative p-1 text-center text-xs font-quantico">
-              {id}
-              {id !== 'output' && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeleteComponent(id);
-                  }}
-                  className="absolute -top-2 -right-2 w-4 h-4 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-[10px] hover:bg-red-600"
-                >
-                  ×
-                </button>
-              )}
+        <div style={{ transform: `translate(${viewportOffset.x}px, ${viewportOffset.y}px)` }}>
+          {Object.entries(nodePositions).map(([id, pos]) => (
+            <div
+              key={id}
+              onMouseDown={(e) => handleMouseDown(e, id)}
+              onClick={(e) => handleClick(e, id)}
+              onMouseEnter={() => {
+                if (connecting && id !== connecting.from) {
+                  setHoveredComponent(id);
+                }
+              }}
+              onMouseLeave={() => {
+                if (connecting) {
+                  setHoveredComponent(null);
+                }
+              }}
+              className={`group absolute w-[60px] h-[20px] rounded cursor-move text-[10px] font-quantico ${
+                id === 'output' ? 'bg-gray-700' :
+                id.startsWith('osc') ? 'bg-blue-600/50' :
+                id.startsWith('fil') ? 'bg-green-600/50' :
+                'bg-purple-600/50'
+              } ${hoveredComponent === id ? 'ring-1 ring-white' : ''} ${draggingNode === id ? 'ring-1 ring-white shadow' : ''}`}
+              style={{
+                left: pos.x,
+                top: pos.y,
+              }}
+            >
+              <div className="relative p-1 text-center text-[10px] text-gray-200">
+                {id}
+                {id !== 'output' && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteComponent(id);
+                    }}
+                    className="absolute -top-1 -right-1 w-3 h-3 bg-gray-700 text-gray-300 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-[8px] hover:bg-gray-600"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
   );
