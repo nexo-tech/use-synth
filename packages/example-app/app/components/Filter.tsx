@@ -40,9 +40,9 @@ const FilterTypeSelector: React.FC<FilterTypeSelectorProps> = ({ value, onChange
 
 interface FilterProps {
   config: {
-    type: string;
-    frequency: number;
-    Q: number;
+    type: BiquadFilterType;
+    frequency?: number;
+    Q?: number;
     gain?: number;
     keytrack?: number;
     envAmount?: number;
@@ -83,7 +83,7 @@ export const Filter: React.FC<FilterProps> = ({ config, onConfigChange }) => {
         <div className="flex justify-center gap-3 mt-2">
           <Knob
             label="Freq"
-            value={config.frequency}
+            value={config.frequency ?? 1000}
             min={20}
             max={20000}
             step={1}
@@ -93,7 +93,7 @@ export const Filter: React.FC<FilterProps> = ({ config, onConfigChange }) => {
           
           <Knob
             label="Q"
-            value={config.Q}
+            value={config.Q ?? 1}
             min={0.1}
             max={20}
             step={0.1}
@@ -103,7 +103,7 @@ export const Filter: React.FC<FilterProps> = ({ config, onConfigChange }) => {
           
           <Knob
             label="Gain"
-            value={config.gain || 0}
+            value={config.gain ?? 0}
             min={-40}
             max={40}
             step={0.1}
@@ -115,7 +115,7 @@ export const Filter: React.FC<FilterProps> = ({ config, onConfigChange }) => {
         <div className="flex justify-center gap-3 mt-2">
           <Knob
             label="KeyTrack"
-            value={config.keytrack || 0}
+            value={config.keytrack ?? 0}
             min={0}
             max={100}
             step={1}
@@ -125,7 +125,7 @@ export const Filter: React.FC<FilterProps> = ({ config, onConfigChange }) => {
           
           <Knob
             label="Env Amt"
-            value={config.envAmount || 0}
+            value={config.envAmount ?? 0}
             min={0}
             max={1}
             step={0.01}

@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Osc from './components/Osc';
+import Filter from './components/Filter';
 
 interface EngineNode {
   type: string;
@@ -345,8 +346,8 @@ class FilterEngineNode implements AudioEngineNode {
     this.filter.frequency.value = this.config.frequency ?? 1000;
     this.filter.Q.value = this.config.Q ?? 1;
     this.filter.gain.value = this.config.gain ?? 1;
-    this.filter.connect(audioNode);
-    this.outputs.forEach((node) => node.handleInputAudio(audioNode));
+    audioNode.connect(this.filter);
+    this.outputs.forEach((node) => node.handleInputAudio(this.filter));
   }
 
   constructor(engine: Engine2, config: FilterConfig, id?: string) {
@@ -354,6 +355,17 @@ class FilterEngineNode implements AudioEngineNode {
     this.id = id || this.type.substring(0, 3) + FilterEngineNode.nextID++;
     this.config = config;
     this.filter = this.engine.context.createBiquadFilter();
+  }
+
+  updateConfig() {
+    const newConfig = this.config
+    console.log(`[Filter ${this.id}] Updating config:`, newConfig);
+
+    // Update the filter instance directly
+    this.filter.type = newConfig.type;
+    this.filter.frequency.value = newConfig.frequency ?? 1000;
+    this.filter.Q.value = newConfig.Q ?? 1;
+    this.filter.gain.value = newConfig.gain ?? 1;
   }
 }
 
@@ -408,8 +420,9 @@ class OscillatorEngineNode implements AudioEngineNode {
     this.instances.set(instanceId, instance);
 
     // hook this voice into the master output
-    const master = this.engine.components.get('output') as MasterGain;
-    if (master) master.handleInputAudio(instance.masterGain);
+    this.outputs.forEach((node) => {
+      node.handleInputAudio(instance.masterGain);
+    });
 
     return instanceId;
   }
@@ -699,9 +712,11 @@ const baseConfig: UseSynthConfig = {
     filters: {
       lpf: {
         type: 'lowpass',
-        frequency: 400,
-        Q: 0.9,
-        envAmount: 1,
+        frequency: 1000,
+        Q: 1,
+        gain: 1,
+        keytrack: 0,
+        envAmount: 0,
       },
     },
     effects: {},
@@ -712,7 +727,10 @@ const baseConfig: UseSynthConfig = {
       amp: { attack: 0.05, decay: 0.2, sustain: 1.0, release: 0.4 },
     },
   },
-  routing: [{ from: 'main', to: 'output' }],
+  routing: [
+    { from: 'main', to: 'lpf' },
+    { from: 'lpf', to: 'output' }
+  ],
 };
 
 export default function OscillatorPage() {
@@ -819,6 +837,23 @@ export default function OscillatorPage() {
     }
   };
 
+  const handleFilterConfigChange = (filterId: string, newConfig: Partial<FilterConfig>) => {
+    if (!synth.current) return;
+
+    const conf = synth.current.getCurrentConfig()
+    // Update the config in place
+    const filterConfig = conf.components.filters[filterId];
+    for (let key in newConfig) {
+      (filterConfig as any)[key] = (newConfig as any)[key];
+    }
+    // Update the filter instance directly
+    const filterNode = synth.current?.components.get(filterId) as FilterEngineNode;
+    if (filterNode) {
+      filterNode.updateConfig();
+      updateUI(x => x + 1)
+    }
+  };
+
   const currentConfig = synth.current?.getCurrentConfig()
 
   return (
@@ -830,6 +865,16 @@ export default function OscillatorPage() {
             <Osc
               config={config}
               onConfigChange={(newConfig) => handleOscConfigChange(id, newConfig)}
+            />
+          </div>
+        ))}
+
+        {currentConfig?.components.filters && Object.entries(currentConfig.components.filters).map(([id, config]) => (
+          <div key={id} className="flex flex-col items-center">
+            <h3 className="text-sm font-quantico mb-2 text-gray-400">Filter {id}</h3>
+            <Filter
+              config={config}
+              onConfigChange={(newConfig) => handleFilterConfigChange(id, newConfig)}
             />
           </div>
         ))}

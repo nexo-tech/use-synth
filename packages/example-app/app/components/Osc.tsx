@@ -12,7 +12,6 @@ const WaveformSelector: React.FC<WaveformSelectorProps> = ({ value, onChange }) 
         { id: 'square', label: 'Square' },
         { id: 'sawtooth', label: 'Saw' },
         { id: 'triangle', label: 'Tri' },
-        { id: 'noise', label: 'Noise' }
     ];
 
     return (
