@@ -732,16 +732,24 @@ class Engine2 {
         const osc = component as OscillatorEngineNode;
         const instance = osc.instances.values().next().value;
         if (instance) {
-          this.modulationTargets.set(`${id}-freq`, instance.voices[0].osc.frequency);
-          this.modulationTargets.set(`${id}-detune`, instance.voices[0].osc.detune);
-          this.modulationTargets.set(`${id}-level`, instance.masterGain.gain);
+          // this.modulationTargets.set(`${id}-freq`, instance.voices[0].osc.frequency);
+          // this.modulationTargets.set(`${id}-detune`, instance.voices[0].osc.detune);
+          // this.modulationTargets.set(`${id}-level`, instance.masterGain.gain);
+          // this.modulationTargets.set(`${id}-pitch`, instance.voices[0].osc.detune);
         }
       } else if (component.type === 'filter') {
         const filter = component as FilterEngineNode;
         this.modulationTargets.set(`${id}-frequency`, filter.filter.frequency);
-        this.modulationTargets.set(`${id}-q`, filter.filter.Q);
-        this.modulationTargets.set(`${id}-gain`, filter.filter.gain);
+        // this.modulationTargets.set(`${id}-q`, filter.filter.Q);
+        // this.modulationTargets.set(`${id}-gain`, filter.filter.gain);
       }
+    });
+    // ---- keep current knob value as DC offset -----------------------------
+    this.modulationTargets.forEach(param => {
+      const dc = this.context.createConstantSource();
+      dc.offset.value = param.value;   // remember present value
+      dc.start();
+      dc.connect(param);               // additive
     });
 
     // Apply modulation connections
@@ -750,7 +758,10 @@ class Engine2 {
       const t = this.modulationTargets.get(connection.targetId);
       if (!s || !t) return;
       const g = this.context.createGain();
-      g.gain.value = connection.amount;      // -1…+1
+      // scale pitch (semitones) to detune cents
+      g.gain.value = connection.targetId.endsWith('-pitch')
+        ? connection.amount * 100            // 1 semi = 100 cent
+        : connection.amount;
       s.connect(g); g.connect(t);
       this.modCords.push({ source: s, gain: g });
     });
@@ -867,7 +878,7 @@ const baseConfig: UseSynthConfig = {
     { from: 'osc2', to: 'fil1' }
   ],
   modulation: [
-    { sourceId: 'env1', targetId: 'fil1-frequency', amount: 1 },
+    { sourceId: 'env1', targetId: 'fil1-frequency', amount: 500 },
   ],
 };
 
@@ -991,6 +1002,7 @@ export default function OscillatorPage() {
       targets.push(
         { id: `${id}-freq`, name: 'Frequency', componentId: id, componentType: 'osc', parameter: 'frequency' },
         { id: `${id}-detune`, name: 'Detune', componentId: id, componentType: 'osc', parameter: 'detune' },
+        { id: `${id}-pitch`, name: 'Pitch (semi)', componentId: id, componentType: 'osc', parameter: 'pitch' },
         { id: `${id}-level`, name: 'Level', componentId: id, componentType: 'osc', parameter: 'level' }
       );
     });
@@ -998,7 +1010,7 @@ export default function OscillatorPage() {
       targets.push(
         { id: `${id}-frequency`, name: 'Frequency', componentId: id, componentType: 'filter', parameter: 'frequency' },
         { id: `${id}-q`, name: 'Q', componentId: id, componentType: 'filter', parameter: 'Q' },
-        { id: `${id}-gain`, name: 'Gain', componentId: id, componentType: 'filter', parameter: 'gain' }
+        { id: `${id}-gain`, name: 'Level', componentId: id, componentType: 'filter', parameter: 'gain' }
       );
     });
     setModulationTargets(targets);
