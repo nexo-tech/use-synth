@@ -6,6 +6,11 @@ import Filter from './components/Filter';
 import Oscilloscope from './components/Oscilloscope';
 import Routing from './components/Routing';
 import { Envelope } from './components/Envelope';
+import ModulationMatrix, {
+  ModulationSource,
+  ModulationTarget,
+  ModulationConnection
+} from './components/ModulationMatrix';
 
 interface EngineNode {
   type: string;
@@ -763,9 +768,7 @@ const baseConfig: UseSynthConfig = {
       },
     },
     effects: {},
-    lfos: {
-      vibrato: { type: 'sine', rate: 5, sync: false },
-    },
+    lfos: {},
     envelopes: {
       env1: { attack: 0.05, decay: 0.2, sustain: 1.0, release: 0.4 },
     },
@@ -934,6 +937,128 @@ export default function OscillatorPage() {
     }
   };
 
+  const [modulationSources, setModulationSources] = React.useState<ModulationSource[]>([]);
+  const [modulationTargets, setModulationTargets] = React.useState<ModulationTarget[]>([]);
+  const [modulationConnections, setModulationConnections] = React.useState<ModulationConnection[]>([]);
+  const [selectedModulationSource, setSelectedModulationSource] = React.useState<string | null>(null);
+
+  // Update modulation sources and targets when config changes
+  React.useEffect(() => {
+    // Update sources (envelopes and LFOs)
+    const sources: ModulationSource[] = [];
+    Object.entries(currentConfig.components.envelopes).forEach(([id, _]) => {
+      sources.push({ id, type: 'env', name: id });
+    });
+    Object.entries(currentConfig.components.lfos).forEach(([id, _]) => {
+      sources.push({ id, type: 'lfo', name: id });
+    });
+    setModulationSources(sources);
+
+    // Update targets (oscillator and filter parameters)
+    const targets: ModulationTarget[] = [];
+    Object.entries(currentConfig.components.oscillators).forEach(([id, _]) => {
+      targets.push(
+        { id: `${id}-freq`, name: 'Frequency', componentId: id, componentType: 'osc', parameter: 'frequency' },
+        { id: `${id}-detune`, name: 'Detune', componentId: id, componentType: 'osc', parameter: 'detune' },
+        { id: `${id}-level`, name: 'Level', componentId: id, componentType: 'osc', parameter: 'level' }
+      );
+    });
+    Object.entries(currentConfig.components.filters).forEach(([id, _]) => {
+      targets.push(
+        { id: `${id}-freq`, name: 'Frequency', componentId: id, componentType: 'filter', parameter: 'frequency' },
+        { id: `${id}-q`, name: 'Q', componentId: id, componentType: 'filter', parameter: 'Q' },
+        { id: `${id}-gain`, name: 'Gain', componentId: id, componentType: 'filter', parameter: 'gain' }
+      );
+    });
+    setModulationTargets(targets);
+  }, [currentConfig]);
+
+  const handleModulationChange = (sourceId: string, targetId: string, amount: number) => {
+    setModulationConnections(prev => {
+      const existing = prev.findIndex(
+        conn => conn.sourceId === sourceId && conn.targetId === targetId
+      );
+
+      if (existing >= 0) {
+        if (amount === 0) {
+          // Remove connection if amount is 0
+          return prev.filter((_, i) => i !== existing);
+        } else {
+          // Update existing connection
+          return prev.map((conn, i) =>
+            i === existing ? { ...conn, amount } : conn
+          );
+        }
+      } else if (amount !== 0) {
+        // Add new connection
+        return [...prev, { sourceId, targetId, amount }];
+      }
+
+      return prev;
+    });
+  };
+
+  const handleModulationSourceClick = (sourceId: string) => {
+    setSelectedModulationSource(sourceId);
+  };
+
+  const handleCreateLFO = () => {
+    const lfoId = `lfo${Object.keys(currentConfig.components.lfos).length + 1}`;
+    const newConfig = {
+      ...currentConfig,
+      components: {
+        ...currentConfig.components,
+        lfos: {
+          ...currentConfig.components.lfos,
+          [lfoId]: {
+            type: 'sine' as const,
+            rate: 1,
+            sync: false
+          }
+        }
+      }
+    };
+    handleConfigChange(newConfig);
+  };
+
+  const handleCreateModEnv = () => {
+    const envId = `env${Object.keys(currentConfig.components.envelopes).length + 1}`;
+    const newConfig = {
+      ...currentConfig,
+      components: {
+        ...currentConfig.components,
+        envelopes: {
+          ...currentConfig.components.envelopes,
+          [envId]: {
+            attack: 0.1,
+            decay: 0.2,
+            sustain: 0.5,
+            release: 0.3
+          }
+        }
+      }
+    };
+    handleConfigChange(newConfig);
+  };
+
+  const handleRemoveSource = (sourceId: string) => {
+    // Remove all connections for this source
+    setModulationConnections(prev => 
+      prev.filter(conn => conn.sourceId !== sourceId)
+    );
+
+    // Remove the source from the config
+    const newConfig = { ...currentConfig };
+    if (sourceId.startsWith('lfo')) {
+      const { [sourceId]: _, ...remainingLFOs } = newConfig.components.lfos;
+      newConfig.components.lfos = remainingLFOs;
+    } else if (sourceId.startsWith('env')) {
+      const { [sourceId]: _, ...remainingEnvs } = newConfig.components.envelopes;
+      newConfig.components.envelopes = remainingEnvs;
+    }
+    handleConfigChange(newConfig);
+  };
+
   return (
     <main className="flex min-h-screen flex-col items-center p-8 bg-gray-950 text-white">
       <div className="flex flex-col gap-6 w-full max-w-5xl">
@@ -1012,6 +1137,18 @@ export default function OscillatorPage() {
             </div>
           </div>
         </div>
+
+        {/* Modulation Matrix */}
+        <ModulationMatrix
+          sources={modulationSources}
+          targets={modulationTargets}
+          connections={modulationConnections}
+          onConnectionChange={handleModulationChange}
+          onSourceClick={handleModulationSourceClick}
+          onCreateLFO={handleCreateLFO}
+          onCreateModEnv={handleCreateModEnv}
+          onRemoveSource={handleRemoveSource}
+        />
 
         {/* Routing Section */}
         <div className="bg-gray-800/50 rounded-xl px-1 pb-1 pt-2 border-gray-700">
