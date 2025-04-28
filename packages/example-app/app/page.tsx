@@ -551,7 +551,7 @@ class Engine2 {
   private isResuming: boolean = false;
   private currentConfig: UseSynthConfig;
   private activeNotes: Map<string, { note: number; oscId: string; instanceId: string }> = new Map();
-  private keyToInstanceId: Map<string, string> = new Map(); // Maps keyboard key to instance ID
+  private keyToInstanceIds: Map<string, Set<string>> = new Map(); // Maps keyboard key to set of instance IDs
 
   constructor() {
     this._context = new AudioContext();
@@ -613,23 +613,29 @@ class Engine2 {
     }
 
     console.log('[Engine] Playing note:', { note, velocity, key });
-    let instanceId: string | null = null;
+    const instanceIds = new Set<string>();
 
+    // Find all oscillators that should play this note
     this.components.forEach((component) => {
       if (component.type === 'oscillator') {
         const osc = component as OscillatorEngineNode;
         // Check if this oscillator has reached its voice limit
         if (osc.instances.size < this.currentConfig.maxVoices) {
-          instanceId = osc.handleStartNode(note, velocity);
+          const instanceId = osc.handleStartNode(note, velocity);
           if (instanceId) {
             this.activeNotes.set(instanceId, { note, oscId: osc.id, instanceId });
-            this.keyToInstanceId.set(key, instanceId);
+            instanceIds.add(instanceId);
           }
         }
       }
     });
 
-    return instanceId;
+    if (instanceIds.size > 0) {
+      this.keyToInstanceIds.set(key, instanceIds);
+      return Array.from(instanceIds)[0]; // Return first instance ID for backward compatibility
+    }
+
+    return null;
   }
 
   async stopNote(key: string) {
@@ -639,25 +645,31 @@ class Engine2 {
       return;
     }
 
-    const instanceId = this.keyToInstanceId.get(key);
-    if (!instanceId) {
-      console.warn('[Engine] No instance found for key:', key);
+    const instanceIds = this.keyToInstanceIds.get(key);
+    if (!instanceIds) {
+      console.warn('[Engine] No instances found for key:', key);
       return;
     }
 
-    const noteInfo = this.activeNotes.get(instanceId);
-    if (!noteInfo) {
-      console.warn('[Engine] No note info found for instance:', instanceId);
-      return;
-    }
+    console.log('[Engine] Stopping note:', { key, instanceIds: Array.from(instanceIds) });
 
-    console.log('[Engine] Stopping note:', { key, instanceId, note: noteInfo.note });
-    const osc = this.components.get(noteInfo.oscId) as OscillatorEngineNode;
-    if (osc) {
-      osc.handleStopNode(instanceId);
-      this.activeNotes.delete(instanceId);
-      this.keyToInstanceId.delete(key);
-    }
+    // Stop each instance
+    instanceIds.forEach(instanceId => {
+      const noteInfo = this.activeNotes.get(instanceId);
+      if (!noteInfo) {
+        console.warn('[Engine] No note info found for instance:', instanceId);
+        return;
+      }
+
+      const osc = this.components.get(noteInfo.oscId) as OscillatorEngineNode;
+      if (osc) {
+        osc.handleStopNode(instanceId);
+        this.activeNotes.delete(instanceId);
+      }
+    });
+
+    // Remove the key mapping
+    this.keyToInstanceIds.delete(key);
   }
 
   createFromConfig(config: UseSynthConfig) {
