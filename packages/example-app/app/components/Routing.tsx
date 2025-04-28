@@ -121,6 +121,24 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
     onConfigChange(newConfig);
   };
 
+  const handleDeleteComponent = (id: string) => {
+    const newConfig = { ...config };
+    
+    // Remove the component from its respective section
+    if (id.startsWith('osc')) {
+      delete newConfig.components.oscillators[id];
+    } else if (id.startsWith('fil')) {
+      delete newConfig.components.filters[id];
+    }
+
+    // Remove any connections involving this component
+    newConfig.routing = newConfig.routing.filter(
+      conn => conn.from !== id && conn.to !== id
+    );
+
+    onConfigChange(newConfig);
+  };
+
   const getComponentColor = (type: string) => {
     switch (type) {
       case 'oscillator':
@@ -286,7 +304,7 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
                 setHoveredComponent(null);
               }
             }}
-            className={`absolute w-[80px] h-[40px] rounded-lg cursor-pointer ${
+            className={`group absolute w-[80px] h-[40px] rounded-lg cursor-pointer ${
               id === 'output' ? getComponentColor('output') : 
               id.startsWith('osc') ? getComponentColor('oscillator') : 
               getComponentColor('filter')
@@ -296,8 +314,19 @@ export default function Routing({ config, onConfigChange }: RoutingProps) {
               top: pos.y,
             }}
           >
-            <div className="p-1 text-center text-xs font-quantico">
+            <div className="relative p-1 text-center text-xs font-quantico">
               {id}
+              {id !== 'output' && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteComponent(id);
+                  }}
+                  className="absolute -top-2 -right-2 w-4 h-4 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-[10px] hover:bg-red-600"
+                >
+                  ×
+                </button>
+              )}
             </div>
           </div>
         ))}
