@@ -954,13 +954,12 @@ export default function OscillatorPage() {
           </div>
 
           {/* Middle Column - Filters */}
-          <div className="col-span-4">
-            <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
-              <h2 className="text-lg font-semibold mb-4 text-gray-300">Filters</h2>
-              <div className="flex flex-col gap-4">
+          <div className="col-span-3">
+            <div className="bg-gray-800/50 rounded-xl border-gray-700">
+              <div className="flex flex-col gap-2">
                 {currentConfig?.components.filters && Object.entries(currentConfig.components.filters).map(([id, config]) => (
-                  <div key={id} className="bg-gray-800 rounded-lg p-3 border border-gray-700">
-                    <h3 className="text-sm font-quantico mb-2 text-gray-400">Filter {id}</h3>
+                  <div key={id} className="bg-gray-800 rounded-lg border-gray-700">
+                    <h3 className="text-sm font-quantico pt-1 pl-1 text-gray-400">Filter {id}</h3>
                     <Filter
                       config={config}
                       onConfigChange={(newConfig) => handleFilterConfigChange(id, newConfig)}
@@ -972,20 +971,22 @@ export default function OscillatorPage() {
           </div>
 
           {/* Right Column - Visuals */}
-          <div className="col-span-4">
-            <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
-              <h2 className="text-lg font-semibold mb-4 text-gray-300">Output</h2>
-              {masterGainRef.current && (
-                <div className="bg-gray-800 rounded-lg p-3 border border-gray-700">
-                  <Oscilloscope
-                    audioNode={masterGainRef.current}
-                    width={300}
-                    height={100}
-                    backgroundColor="#1a1a1a"
-                    lineColor="#00ff00"
-                  />
-                </div>
-              )}
+          <div className="col-span-3">
+            <div className="bg-gray-800/50 rounded-xl border-gray-700">
+              <div className="flex flex-col gap-2">
+                {masterGainRef.current && (
+                  <div className="bg-gray-800 rounded-lg border-gray-700">
+                    <h3 className="text-sm font-quantico pt-1 pl-1 text-gray-400">Output</h3>
+                    <Oscilloscope
+                      audioNode={masterGainRef.current}
+                      width={300}
+                      height={100}
+                      backgroundColor="#1a1a1a"
+                      lineColor="#00ff00"
+                    />
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
