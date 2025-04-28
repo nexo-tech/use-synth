@@ -878,69 +878,11 @@ export default function OscillatorPage() {
     };
   }, []); // Empty dependency array since we're using refs
 
-  const handleOscConfigChange = (oscId: string, newConfig: Partial<OscillatorConfig>) => {
-    if (!synth.current) return;
-
-    const conf = synth.current.getCurrentConfig()
-    // Update the config in place
-    const oscConfig = conf.components.oscillators[oscId];
-    for (let key in newConfig) {
-      (oscConfig as any)[key] = (newConfig as any)[key];
-    }
-    // Update the oscillator instance directly
-    const oscNode = synth.current?.components.get(oscId) as OscillatorEngineNode;
-    if (oscNode) {
-      oscNode.updateConfig();
-      updateUI(x => x + 1)
-    }
-  };
-
-  const handleFilterConfigChange = (filterId: string, newConfig: Partial<FilterConfig>) => {
-    if (!synth.current) return;
-
-    const conf = synth.current.getCurrentConfig()
-    // Update the config in place
-    const filterConfig = conf.components.filters[filterId];
-    for (let key in newConfig) {
-      (filterConfig as any)[key] = (newConfig as any)[key];
-    }
-    // Update the filter instance directly
-    const filterNode = synth.current?.components.get(filterId) as FilterEngineNode;
-    if (filterNode) {
-      filterNode.updateConfig();
-      updateUI(x => x + 1)
-    }
-  };
-
-  const handleEnvelopeConfigChange = (envId: string, newConfig: Partial<EnvelopeConfig>) => {
-    if (!synth.current) return;
-
-    const conf = synth.current.getCurrentConfig()
-    // Update the config in place
-    const envConfig = conf.components.envelopes[envId];
-    for (let key in newConfig) {
-      (envConfig as any)[key] = (newConfig as any)[key];
-    }
-    // Update the envelope instance directly
-    const envNode = synth.current?.components.get(envId) as ADSREnvelope;
-    if (envNode) {
-      envNode.config = { ...envNode.config, ...newConfig };
-      updateUI(x => x + 1)
-    }
-  };
-
-  const handleConfigChange = (newConfig: UseSynthConfig) => {
-    setCurrentConfig(newConfig);
-    if (synth.current) {
-      synth.current.createFromConfig(newConfig);
-      updateUI(x => x + 1);
-    }
-  };
-
   const [modulationSources, setModulationSources] = React.useState<ModulationSource[]>([]);
   const [modulationTargets, setModulationTargets] = React.useState<ModulationTarget[]>([]);
   const [modulationConnections, setModulationConnections] = React.useState<ModulationConnection[]>([]);
   const [selectedModulationSource, setSelectedModulationSource] = React.useState<string | null>(null);
+  const [lastTouchedParam, setLastTouchedParam] = React.useState<string | null>(null);
 
   // Update modulation sources and targets when config changes
   React.useEffect(() => {
@@ -1059,6 +1001,69 @@ export default function OscillatorPage() {
     handleConfigChange(newConfig);
   };
 
+  const handleOscConfigChange = (oscId: string, newConfig: Partial<OscillatorConfig>) => {
+    if (!synth.current) return;
+
+    const conf = synth.current.getCurrentConfig()
+    // Update the config in place
+    const oscConfig = conf.components.oscillators[oscId];
+    for (let key in newConfig) {
+      (oscConfig as any)[key] = (newConfig as any)[key];
+      // Track which parameter was changed
+      setLastTouchedParam(`${oscId}-${key}`);
+    }
+    // Update the oscillator instance directly
+    const oscNode = synth.current?.components.get(oscId) as OscillatorEngineNode;
+    if (oscNode) {
+      oscNode.updateConfig();
+      updateUI(x => x + 1)
+    }
+  };
+
+  const handleFilterConfigChange = (filterId: string, newConfig: Partial<FilterConfig>) => {
+    if (!synth.current) return;
+
+    const conf = synth.current.getCurrentConfig()
+    // Update the config in place
+    const filterConfig = conf.components.filters[filterId];
+    for (let key in newConfig) {
+      (filterConfig as any)[key] = (newConfig as any)[key];
+      // Track which parameter was changed
+      setLastTouchedParam(`${filterId}-${key}`);
+    }
+    // Update the filter instance directly
+    const filterNode = synth.current?.components.get(filterId) as FilterEngineNode;
+    if (filterNode) {
+      filterNode.updateConfig();
+      updateUI(x => x + 1)
+    }
+  };
+
+  const handleEnvelopeConfigChange = (envId: string, newConfig: Partial<EnvelopeConfig>) => {
+    if (!synth.current) return;
+
+    const conf = synth.current.getCurrentConfig()
+    // Update the config in place
+    const envConfig = conf.components.envelopes[envId];
+    for (let key in newConfig) {
+      (envConfig as any)[key] = (newConfig as any)[key];
+    }
+    // Update the envelope instance directly
+    const envNode = synth.current?.components.get(envId) as ADSREnvelope;
+    if (envNode) {
+      envNode.config = { ...envNode.config, ...newConfig };
+      updateUI(x => x + 1)
+    }
+  };
+
+  const handleConfigChange = (newConfig: UseSynthConfig) => {
+    setCurrentConfig(newConfig);
+    if (synth.current) {
+      synth.current.createFromConfig(newConfig);
+      updateUI(x => x + 1);
+    }
+  };
+
   return (
     <main className="flex min-h-screen flex-col items-center p-8 bg-gray-950 text-white">
       <div className="flex flex-col gap-6 w-full max-w-5xl">
@@ -1148,6 +1153,7 @@ export default function OscillatorPage() {
           onCreateLFO={handleCreateLFO}
           onCreateModEnv={handleCreateModEnv}
           onRemoveSource={handleRemoveSource}
+          lastTouchedParam={lastTouchedParam}
         />
 
         {/* Routing Section */}

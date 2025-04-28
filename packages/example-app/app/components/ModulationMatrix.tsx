@@ -30,6 +30,7 @@ interface ModulationMatrixProps {
   onCreateLFO: () => void;
   onCreateModEnv: () => void;
   onRemoveSource: (sourceId: string) => void;
+  lastTouchedParam: string | null;
 }
 
 export const ModulationMatrix: React.FC<ModulationMatrixProps> = ({
@@ -41,12 +42,17 @@ export const ModulationMatrix: React.FC<ModulationMatrixProps> = ({
   onCreateLFO,
   onCreateModEnv,
   onRemoveSource,
+  lastTouchedParam,
 }) => {
   // Get all target IDs that have active connections
   const activeTargetIds = new Set(connections.map(conn => conn.targetId));
   
-  // Filter targets to show only those with active connections
-  const visibleTargets = targets.filter(target => activeTargetIds.has(target.id));
+  // Filter targets to show only those with active connections or the last touched parameter
+  const visibleTargets = targets.filter(target => 
+    activeTargetIds.has(target.id) || target.id === lastTouchedParam
+  );
+
+  console.log({lastTouchedParam})
 
   return (
     <div className="bg-gray-800/50 rounded-lg p-2">
@@ -97,7 +103,7 @@ export const ModulationMatrix: React.FC<ModulationMatrixProps> = ({
           </thead>
           <tbody>
             {visibleTargets.map(target => (
-              <tr key={target.id} className="border-t border-gray-700">
+              <tr key={target.id} className={`border-t border-gray-700 ${target.id === lastTouchedParam ? 'bg-gray-700/30' : ''}`}>
                 <td className="text-xs font-quantico text-gray-300 p-1">
                   {target.componentId}.{target.parameter}
                 </td>
