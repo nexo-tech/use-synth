@@ -44,8 +44,6 @@ interface FilterProps {
     frequency?: number;
     Q?: number;
     gain?: number;
-    keytrack?: number;
-    envAmount?: number;
   };
   onConfigChange: (config: any) => void;
 }
@@ -96,14 +94,6 @@ export const Filter: React.FC<FilterProps> = ({ config, onConfigChange }) => {
     onConfigChange({ ...config, gain });
   };
 
-  const handleKeytrackChange = (keytrack: number) => {
-    onConfigChange({ ...config, keytrack });
-  };
-
-  const handleEnvAmountChange = (envAmount: number) => {
-    onConfigChange({ ...config, envAmount });
-  };
-
   return (
     <div className="bg-gray-900 p-2 rounded-lg shadow-xl border border-gray-800">
       <div className="flex flex-col items-center">
@@ -139,28 +129,6 @@ export const Filter: React.FC<FilterProps> = ({ config, onConfigChange }) => {
             step={0.1}
             size="sm"
             onChange={handleGainChange}
-          />
-        </div>
-
-        <div className="flex justify-center gap-3 mt-2">
-          <Knob
-            label="KeyTrack"
-            value={config.keytrack ?? 0}
-            min={0}
-            max={100}
-            step={1}
-            size="sm"
-            onChange={handleKeytrackChange}
-          />
-          
-          <Knob
-            label="Env Amt"
-            value={config.envAmount ?? 0}
-            min={0}
-            max={1}
-            step={0.01}
-            size="sm"
-            onChange={handleEnvAmountChange}
           />
         </div>
       </div>

@@ -330,8 +330,6 @@ export interface FilterConfig {
   frequency?: number;
   Q?: number;
   gain?: number;
-  keytrack?: number;
-  envAmount?: number;
 }
 
 class MasterGain implements AudioEngineNode {
@@ -405,12 +403,17 @@ class OscillatorEngineNode implements AudioEngineNode {
   instances: Map<string, OscillatorEngineNodeInstance> = new Map();
   config: OscillatorConfig;
   outputs: AudioEngineNode[] = [];
+  inputs: AudioEngineNode[] = [];
   private nextInstanceId = 0;
 
   static nextID = 0;
 
   setOutput(node: AudioEngineNode) {
     this.outputs.push(node);
+  }
+
+  setInput(node: AudioEngineNode) {
+    this.inputs.push(node);
   }
 
   handleInputAudio(_: AudioNode) {
@@ -438,8 +441,8 @@ class OscillatorEngineNode implements AudioEngineNode {
 
     instance.updateLevel(this.config.level ?? 1);
 
-    // Find connected envelope
-    const envelope = this.outputs.find(node => node.type === 'adsr') as ADSREnvelope | undefined;
+    // Find connected envelope in inputs
+    const envelope = this.inputs.find(node => node.type === 'adsr') as ADSREnvelope | undefined;
     if (envelope) {
       console.log(`[Osc ${this.id}] Applying envelope ${envelope.id}`);
       envelope.handleStartNode(instance.adsrGain);
@@ -450,9 +453,7 @@ class OscillatorEngineNode implements AudioEngineNode {
 
     // hook this voice into the master output
     this.outputs.forEach((node) => {
-      if (node.type !== 'adsr') { // Don't connect to envelope directly
-        node.handleInputAudio(instance.masterGain);
-      }
+      node.handleInputAudio(instance.masterGain);
     });
 
     return instanceId;
@@ -467,7 +468,7 @@ class OscillatorEngineNode implements AudioEngineNode {
     }
 
     const now = this.engine.context.currentTime;
-    const envelope = this.outputs.find(node => node.type === 'adsr') as ADSREnvelope | undefined;
+    const envelope = this.inputs.find(node => node.type === 'adsr') as ADSREnvelope | undefined;
     const releaseTime = envelope?.config.release ?? 0;
 
     if (envelope) {
@@ -712,7 +713,13 @@ class Engine2 {
       const toNode = this.components.get(connection.to);
 
       if (fromNode && toNode) {
-        fromNode.setOutput(toNode);
+        if (fromNode.type === 'adsr' && toNode.type === 'oscillator') {
+          // For envelope to oscillator connections, set the envelope as input
+          (toNode as OscillatorEngineNode).setInput(fromNode);
+        } else {
+          // For all other connections, use normal output routing
+          fromNode.setOutput(toNode);
+        }
         console.log(`[Engine] Successfully connected ${connection.from} -> ${connection.to}`);
       } else {
         console.error(`[Engine] Failed to connect ${connection.from} -> ${connection.to}`, {
@@ -753,8 +760,6 @@ const baseConfig: UseSynthConfig = {
         frequency: 1000,
         Q: 1,
         gain: 1,
-        keytrack: 0,
-        envAmount: 0,
       },
     },
     effects: {},
