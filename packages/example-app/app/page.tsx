@@ -552,6 +552,7 @@ export interface UseSynthConfig {
     envelopes: Record<string, EnvelopeConfig>;
   };
   routing: RoutingConnection[];
+  modulation: ModulationConnection[]; // Add modulation matrix configuration
 }
 
 class Engine2 {
@@ -562,6 +563,8 @@ class Engine2 {
   private currentConfig: UseSynthConfig;
   private activeNotes: Map<string, { note: number; oscId: string; instanceId: string }> = new Map();
   private keyToInstanceIds: Map<string, Set<string>> = new Map(); // Maps keyboard key to set of instance IDs
+  private modulationSources: Map<string, AudioNode> = new Map(); // Maps source IDs to their audio nodes
+  private modulationTargets: Map<string, AudioParam> = new Map(); // Maps target IDs to their audio params
 
   constructor() {
     this._context = new AudioContext();
@@ -570,7 +573,8 @@ class Engine2 {
     this.currentConfig = {
       ...baseConfig,
       polyphony: 8,
-      maxVoices: 5
+      maxVoices: 5,
+      modulation: []
     };
   }
 
@@ -682,6 +686,64 @@ class Engine2 {
     this.keyToInstanceIds.delete(key);
   }
 
+  private updateModulationMatrix() {
+    // Clear existing modulation connections
+    this.modulationSources.clear();
+    this.modulationTargets.clear();
+
+    // Set up modulation sources (LFOs and envelopes)
+    Object.entries(this.currentConfig.components.lfos).forEach(([id, config]) => {
+      const lfo = this.context.createOscillator();
+      lfo.frequency.value = config.rate;
+      lfo.type = config.type as OscillatorType;
+      lfo.start();
+      this.modulationSources.set(id, lfo);
+    });
+
+    Object.entries(this.currentConfig.components.envelopes).forEach(([id, _]) => {
+      const env = this.components.get(id) as ADSREnvelope;
+      if (env) {
+        // Create a gain node to represent the envelope output
+        const envGain = this.context.createGain();
+        this.modulationSources.set(id, envGain);
+      }
+    });
+
+    // Set up modulation targets
+    this.components.forEach((component, id) => {
+      if (component.type === 'oscillator') {
+        const osc = component as OscillatorEngineNode;
+        const instance = osc.instances.values().next().value;
+        if (instance) {
+          this.modulationTargets.set(`${id}-freq`, instance.voices[0].osc.frequency);
+          this.modulationTargets.set(`${id}-detune`, instance.voices[0].osc.detune);
+          this.modulationTargets.set(`${id}-level`, instance.masterGain.gain);
+        }
+      } else if (component.type === 'filter') {
+        const filter = component as FilterEngineNode;
+        this.modulationTargets.set(`${id}-frequency`, filter.filter.frequency);
+        this.modulationTargets.set(`${id}-q`, filter.filter.Q);
+        this.modulationTargets.set(`${id}-gain`, filter.filter.gain);
+      }
+    });
+
+    // Apply modulation connections
+    this.currentConfig.modulation.forEach(connection => {
+      const source = this.modulationSources.get(connection.sourceId);
+      const target = this.modulationTargets.get(connection.targetId);
+
+      if (source && target) {
+        // Create a gain node to control modulation amount
+        const gain = this.context.createGain();
+        gain.gain.value = connection.amount;
+
+        // Connect source to target through gain
+        source.connect(gain);
+        gain.connect(target);
+      }
+    });
+  }
+
   createFromConfig(config: UseSynthConfig) {
     console.log('[Engine] Creating synth from config:', config);
     this.currentConfig = config;
@@ -733,6 +795,18 @@ class Engine2 {
         });
       }
     }
+
+    // Set up modulation matrix
+    if (config.modulation) {
+      console.log('[Engine] Setting up initial modulation matrix:', config.modulation);
+      this.updateModulationMatrix();
+    }
+  }
+
+  // Add method to update modulation connections
+  updateModulation(connections: ModulationConnection[]) {
+    this.currentConfig.modulation = connections;
+    this.updateModulationMatrix();
   }
 }
 
@@ -779,6 +853,9 @@ const baseConfig: UseSynthConfig = {
     { from: 'fil1', to: 'output' },
     { from: 'osc1', to: 'fil1' },
     { from: 'osc2', to: 'fil1' }
+  ],
+  modulation: [
+    { sourceId: 'env1', targetId: 'fil1-frequency', amount: 1 },
   ],
 };
 
@@ -913,6 +990,11 @@ export default function OscillatorPage() {
       );
     });
     setModulationTargets(targets);
+
+    // Load initial modulation connections from config
+    if (currentConfig.modulation) {
+      setModulationConnections(currentConfig.modulation);
+    }
   }, [currentConfig]);
 
   const handleModulationChange = (sourceId: string, targetId: string, amount: number) => {
@@ -921,22 +1003,30 @@ export default function OscillatorPage() {
         conn => conn.sourceId === sourceId && conn.targetId === targetId
       );
 
+      let newConnections: ModulationConnection[];
       if (existing >= 0) {
         if (amount === 0) {
           // Remove connection if amount is 0
-          return prev.filter((_, i) => i !== existing);
+          newConnections = prev.filter((_, i) => i !== existing);
         } else {
           // Update existing connection
-          return prev.map((conn, i) =>
+          newConnections = prev.map((conn, i) =>
             i === existing ? { ...conn, amount } : conn
           );
         }
       } else if (amount !== 0) {
         // Add new connection
-        return [...prev, { sourceId, targetId, amount }];
+        newConnections = [...prev, { sourceId, targetId, amount }];
+      } else {
+        newConnections = prev;
       }
 
-      return prev;
+      // Update the engine's modulation matrix
+      if (synth.current) {
+        synth.current.updateModulation(newConnections);
+      }
+
+      return newConnections;
     });
   };
 
@@ -1063,6 +1153,8 @@ export default function OscillatorPage() {
       updateUI(x => x + 1);
     }
   };
+
+  console.log({ currentConfig })
 
   return (
     <main className="flex min-h-screen flex-col items-center p-8 bg-gray-950 text-white">
