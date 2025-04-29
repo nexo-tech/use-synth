@@ -209,12 +209,14 @@ export class SynthOscillator extends SynthNode {
         break;
       }
       case "NoteStartEvent": {
+        console.log(event.constructor.name, "a");
         const ev = event as NoteStartEvent;
         const note = this.getNote(ev.note);
         note.start();
         break;
       }
       case "NoteStopEvent": {
+        console.log(event.constructor.name, "a");
         const ev = event as NoteStopEvent;
         const note = this.notes.get(ev.note);
         if (note) {

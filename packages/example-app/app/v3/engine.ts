@@ -5,6 +5,8 @@ import {
   DisconnectionEvent,
   NodeCreateEvent,
   NodeDeleteEvent,
+  NoteStartEvent,
+  NoteStopEvent,
   SynthEvent,
   SynthNode,
 } from "./base";
@@ -46,8 +48,8 @@ export class SynthEngine {
   ctx: AudioContext;
 
   connections: Set<Connection> = new Set();
-  fromTo: Map<string, Connection[]> = new Map();
-  toFrom: Map<string, Connection[]> = new Map();
+  fromTo: Map<string, Map<string, Connection>> = new Map();
+  toFrom: Map<string, Map<string, Connection>> = new Map();
 
   constructor() {
     // Create web audio context
@@ -56,9 +58,29 @@ export class SynthEngine {
     this.nodes.set(output.id, output);
   }
 
+  notes: Map<number, boolean> = new Map();
+
   sendEvent(event: SynthEvent) {
     switch (event.constructor.name) {
+      case "NoteStartEvent": {
+        const ev = event as NoteStartEvent;
+        if (this.notes.get(ev.note)) {
+          return;
+        }
+        this.notes.set(ev.note, true);
+        break;
+      }
+      case "NoteStopEvent": {
+        const ev = event as NoteStopEvent;
+        if (!this.notes.get(ev.note)) {
+          return;
+        }
+        this.notes.set(ev.note, false);
+        break;
+      }
       case "ConnectionEvent": {
+        // check if such connection already exists
+
         const ev = event as ConnectionEvent;
         this.connections.add(ev.connection);
         this.fromTo.set(ev.connection.fromID, [
@@ -90,9 +112,13 @@ export class SynthEngine {
       }
       case "NodeCreateEvent": {
         const ev = event as NodeCreateEvent<any>;
+        const id = ev.id;
+        if (this.nodes.has(id)) {
+          return;
+        }
         switch (ev.type) {
           case "oscillator":
-            const oscillator = new SynthOscillator(ev.id, this, ev.config);
+            const oscillator = new SynthOscillator(id, this, ev.config);
             this.nodes.set(oscillator.id, oscillator);
             break;
           case "adsr":
@@ -104,6 +130,9 @@ export class SynthEngine {
       }
       case "NodeDeleteEvent": {
         const ev = event as NodeDeleteEvent;
+        if (!this.nodes.has(ev.id)) {
+          return;
+        }
         // Find all connections that connect to this node
         const connections = this.fromTo.get(ev.id) || [];
         for (const c of connections) {

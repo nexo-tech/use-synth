@@ -100,12 +100,14 @@ export class SynthADSR implements SynthNode {
   observe(event: SynthEvent): void {
     switch (event.constructor.name) {
       case "NoteStartEvent": {
+        console.log(event.constructor.name);
         const ev = event as NoteStartEvent;
         const adsr = this.getNoteADSR(ev.note);
         adsr.noteOn();
         break;
       }
       case "NoteStopEvent": {
+        console.log(event.constructor.name);
         const ev = event as NoteStopEvent;
         const adsr = this.noteADSRs.get(ev.note);
         if (adsr) {

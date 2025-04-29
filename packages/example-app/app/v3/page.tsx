@@ -98,7 +98,29 @@ function Oscilloscope({ engine }: { engine: SynthEngine }) {
 export default function OscillatorPage() {
   const [engineRef, setEngineRef] = useState<SynthEngine | null>(null);
   useEffect(() => {
-    setEngineRef(new SynthEngine());
+    const engine = new SynthEngine();
+    setEngineRef(engine);
+
+
+    engine.sendEvent(new NodeCreateEvent("osc1", "oscillator", {
+      type: "sawtooth",
+      detune: -7,
+      level: 0.5,
+      unisonVoices: 5,
+      unisonSpread: 25,
+      unisonStereo: 50,
+    }));
+
+    engine.sendEvent(new NodeCreateEvent("adsr1", "adsr", {
+      attack: 0.1,
+      decay: 0.4,
+      sustain: 0.5,
+      release: 1,
+    }));
+
+    engine.sendEvent(new ConnectionEvent(new Connection("adsr1", "osc1")));
+    engine.sendEvent(new ConnectionEvent(new Connection("osc1", "output")));
+
 
   }, []);
   const [render, setRender] = useState(0);
@@ -108,24 +130,6 @@ export default function OscillatorPage() {
         await engineRef!.ctx.resume();
         const engine = engineRef!;
 
-        engine.sendEvent(new NodeCreateEvent("osc1", "oscillator", {
-          type: "sawtooth",
-          detune: -7,
-          level: 0.5,
-          unisonVoices: 5,
-          unisonSpread: 25,
-          unisonStereo: 50,
-        }));
-
-        engine.sendEvent(new NodeCreateEvent("adsr1", "adsr", {
-          attack: 0.1,
-          decay: 0.4,
-          sustain: 0.5,
-          release: 1,
-        }));
-
-        engine.sendEvent(new ConnectionEvent(new Connection("adsr1", "osc1")));
-        engine.sendEvent(new ConnectionEvent(new Connection("osc1", "output")));
         engine.sendEvent(new NoteStartEvent(60, 127));
         setTimeout(() => {
           setRender(render + 1);
