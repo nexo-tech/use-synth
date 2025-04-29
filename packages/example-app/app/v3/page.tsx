@@ -30,8 +30,9 @@ function Oscilloscope({ engine }: { engine: SynthEngine }) {
 
     // Connect analyser to destination
     const adsr = engine.nodes.get("adsr1") as SynthADSR | null;
-    const note = adsr?.getNoteADSR(60)
-    console.log("ADSR", adsr, note, engine)
+    // let note = engine.nodes.get("osc1") // works
+    let note = adsr?.getNoteADSR(60) // doesn't work!
+    console.log("ADSR", note?.get())
     note?.get()?.connect(analyser.current);
 
     // Animation loop
@@ -117,10 +118,10 @@ export default function OscillatorPage() {
         }));
 
         engine.sendEvent(new NodeCreateEvent("adsr1", "adsr", {
-          attack: 0.5,
-          decay: 0.2,
+          attack: 0.1,
+          decay: 0.4,
           sustain: 0.5,
-          release: 0.3,
+          release: 1,
         }));
 
         engine.sendEvent(new ConnectionEvent(new Connection("adsr1", "osc1")));

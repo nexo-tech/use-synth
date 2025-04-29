@@ -85,7 +85,7 @@ export class SynthOscillator extends SynthNode {
         }
         break;
       }
-      case "NoteStartEvent":
+      case "NoteStartEvent": {
         // based on unisonVoices, create that many voices
         const targetVoices = this.config.unisonVoices ?? 1;
         const spread = this.config.unisonSpread ?? 0;
@@ -112,6 +112,7 @@ export class SynthOscillator extends SynthNode {
           const panner = context.createStereoPanner();
           const gain = context.createGain();
           const delay = context.createDelay();
+          const levelGain = context.createGain(); // New gain node for level control
 
           // Configure voice
           osc.type = this.config.type;
@@ -123,14 +124,15 @@ export class SynthOscillator extends SynthNode {
             voicePhase / (2 * Math.PI * osc.frequency.value);
           delay.connect(panner);
           panner.pan.value = pan;
-          panner.connect(gain);
+          panner.connect(levelGain); // Connect to level gain first
+          levelGain.gain.value = this.config.level ?? 1.0; // Set the level
+          levelGain.connect(gain); // Then connect to the ADSR-controlled gain
           gain.connect(this.masterGain);
 
+          // Get ADSR signal and connect it to the gain
           if (this.inputADSR) {
-            const adsrSignal = this.inputADSR
-              .getNoteADSR((event as NoteStartEvent).note)
-              .get();
-
+            const adsrSignal = this.inputADSR.getNoteADSR((event as NoteStartEvent).note).get();
+            gain.gain.value = 0;
             adsrSignal.connect(gain.gain);
           }
 
@@ -143,6 +145,7 @@ export class SynthOscillator extends SynthNode {
           voice.osc.start();
         });
         break;
+      }
       case "NoteStopEvent":
         this.voices.forEach((voice) => {
           if (this.inputADSR) {

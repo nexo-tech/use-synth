@@ -16,6 +16,7 @@ export interface ADSRConfig {
 
 class NoteADSR {
   private gainNode: GainNode;
+  private cv: ConstantSourceNode;
   private isPlaying: boolean = false;
 
   constructor(
@@ -25,21 +26,26 @@ class NoteADSR {
   ) {
     this.gainNode = engine.ctx.createGain();
     this.gainNode.gain.value = 0;
+    this.cv = engine.ctx.createConstantSource();
+    this.cv.offset.value = 0;
+    this.cv.connect(this.gainNode);
   }
 
-  get(): GainNode {
-    return this.gainNode;
+  get(): AudioNode {
+    return this.cv;
   }
 
   noteOn() {
     if (this.isPlaying) return;
     this.isPlaying = true;
+    console.log("noteOn", this.gainNode);
+    this.cv.start();
 
     const now = this.engine.ctx.currentTime;
-    this.gainNode.gain.cancelScheduledValues(now);
-    this.gainNode.gain.setValueAtTime(0, now);
-    this.gainNode.gain.linearRampToValueAtTime(1, now + this.config.attack);
-    this.gainNode.gain.linearRampToValueAtTime(
+    this.cv.offset.cancelScheduledValues(now);
+    this.cv.offset.setValueAtTime(0, now);
+    this.cv.offset.linearRampToValueAtTime(1, now + this.config.attack);
+    this.cv.offset.linearRampToValueAtTime(
       this.config.sustain,
       now + this.config.attack + this.config.decay
     );
@@ -50,9 +56,18 @@ class NoteADSR {
     this.isPlaying = false;
 
     const now = this.engine.ctx.currentTime;
-    this.gainNode.gain.cancelScheduledValues(now);
-    this.gainNode.gain.setValueAtTime(this.gainNode.gain.value, now);
-    this.gainNode.gain.linearRampToValueAtTime(0, now + this.config.release);
+    this.cv.offset.cancelScheduledValues(now);
+    this.cv.offset.setValueAtTime(this.cv.offset.value, now);
+    this.cv.offset.linearRampToValueAtTime(0, now + this.config.release);
+    setTimeout(() => {
+      this.cv.stop();
+      this.disconnect();
+    }, this.config.release * 1000);
+  }
+
+  disconnect() {
+    this.cv.disconnect();
+    this.gainNode.disconnect();
   }
 }
 
@@ -88,7 +103,6 @@ export class SynthADSR implements SynthNode {
         const ev = event as NoteStartEvent;
         const adsr = this.getNoteADSR(ev.note);
         adsr.noteOn();
-        console.log("started adsr note ", ev.note, adsr)
         break;
       }
       case "NoteStopEvent": {
@@ -96,10 +110,7 @@ export class SynthADSR implements SynthNode {
         const adsr = this.noteADSRs.get(ev.note);
         if (adsr) {
           adsr.noteOff();
-          // Clean up after release phase is complete
-          setTimeout(() => {
-            this.noteADSRs.delete(ev.note);
-          }, this.config.release * 1000);
+          this.noteADSRs.delete(ev.note);
         }
         break;
       }
