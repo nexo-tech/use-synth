@@ -29,31 +29,160 @@ class OscillatorVoice {
   ) {}
 }
 
-export class SynthOscillator extends SynthNode {
-  masterGain: GainNode;
-  voices: OscillatorVoice[] = [];
+class OscillatorNote {
+  private voices: OscillatorVoice[] = [];
+  private levelGain: GainNode;
+  private adsrGain: GainNode;
+
   constructor(
-    private _id: string,
+    private engine: SynthEngine,
+    private config: OscillatorConfig,
+    private note: number,
+    private inputADSR: SynthADSR | null
+  ) {
+    this.levelGain = engine.ctx.createGain();
+    this.adsrGain = engine.ctx.createGain();
+    this.levelGain.connect(this.adsrGain);
+    this.createVoices();
+  }
+
+  private createVoices() {
+    const targetVoices = this.config.unisonVoices ?? 1;
+    const spread = this.config.unisonSpread ?? 0;
+    const detune = this.config.detune ?? 0;
+    const stereo = this.config.unisonStereo ?? 0;
+    const phase = 0;
+    const context = this.engine.ctx;
+
+    for (let i = 0; i < targetVoices; i++) {
+      const position = targetVoices == 1 ? 0 : (i / (targetVoices - 1)) * 2 - 1;
+      const voiceDetune = position * spread + detune;
+      const pan = position * stereo;
+      const voicePhase =
+        phase !== 0 ? phase + Math.random() * 0.1 : Math.random() * 2 * Math.PI;
+
+      const osc = context.createOscillator();
+      const panner = context.createStereoPanner();
+      const gain = context.createGain();
+      const delay = context.createDelay();
+
+      osc.type = this.config.type;
+      osc.detune.value = voiceDetune;
+      osc.frequency.value = 440 * Math.pow(2, (this.note - 69) / 12);
+
+      osc.connect(delay);
+      delay.delayTime.value = voicePhase / (2 * Math.PI * osc.frequency.value);
+      delay.connect(panner);
+      panner.pan.value = pan;
+      panner.connect(gain);
+      gain.connect(this.levelGain);
+
+      this.voices.push(
+        new OscillatorVoice(osc, panner, gain, delay, voicePhase)
+      );
+    }
+
+    // Set level
+    this.levelGain.gain.value = this.config.level ?? 1.0;
+
+    // Connect ADSR if available
+    if (this.inputADSR) {
+      const adsrSignal = this.inputADSR.getNoteADSR(this.note).get();
+      this.adsrGain.gain.value = 0;
+      adsrSignal.connect(this.adsrGain.gain);
+    }
+  }
+
+  start() {
+    this.voices.forEach((voice) => voice.osc.start());
+  }
+
+  stop() {
+    this.voices.forEach((voice) => {
+      if (this.inputADSR) {
+        const releaseTime = this.inputADSR.config.release * 1000;
+        setTimeout(() => {
+          voice.osc.stop();
+          voice.osc.disconnect();
+        }, releaseTime);
+      } else {
+        voice.osc.stop();
+        voice.osc.disconnect();
+      }
+    });
+  }
+
+  disconnect() {
+    this.voices.forEach((voice) => voice.osc.disconnect());
+    this.levelGain.disconnect();
+    this.adsrGain.disconnect();
+  }
+
+  getOutput(): AudioNode {
+    return this.adsrGain;
+  }
+}
+
+export class SynthOscillator extends SynthNode {
+  private masterGain: GainNode;
+  private notes: Map<number, OscillatorNote> = new Map();
+  private inputADSR: SynthADSR | null = null;
+
+  constructor(
+    public readonly id: string,
     private engine: SynthEngine,
     private config: OscillatorConfig
   ) {
     super();
-    // Create master gain node to which voices connect
-    this.masterGain = this.engine.ctx.createGain();
-  }
-
-  get id(): string {
-    return this._id;
+    this.masterGain = engine.ctx.createGain();
   }
 
   get(): AudioNode | null {
     return this.masterGain;
   }
 
-  inputADSR: SynthADSR | null = null;
+  private getNote(note: number): OscillatorNote {
+    let oscNote = this.notes.get(note);
+    if (!oscNote) {
+      oscNote = new OscillatorNote(
+        this.engine,
+        this.config,
+        note,
+        this.inputADSR
+      );
+      this.notes.set(note, oscNote);
+      oscNote.getOutput().connect(this.masterGain);
+    }
+    return oscNote;
+  }
 
   observe(event: SynthEvent): void {
     switch (event.constructor.name) {
+      case "ConnectionEvent": {
+        const ev = event as ConnectionEvent;
+        const upstream = this.engine.nodes.get(ev.connection.fromID);
+        if (upstream instanceof SynthADSR) {
+          this.inputADSR = upstream;
+          // Recreate all notes with new ADSR
+          this.notes.forEach((note, noteNumber) => {
+            note.stop();
+            const newNote = new OscillatorNote(
+              this.engine,
+              this.config,
+              noteNumber,
+              this.inputADSR
+            );
+            this.notes.set(noteNumber, newNote);
+            newNote.getOutput().connect(this.masterGain);
+            if (this.notes.has(noteNumber)) {
+              newNote.start();
+            }
+          });
+        } else {
+          this.engine.sendEvent(new DisconnectionEvent(ev.connection));
+        }
+        break;
+      }
       case "DisconnectionEvent": {
         const ev = event as DisconnectionEvent;
         if (
@@ -61,104 +190,39 @@ export class SynthOscillator extends SynthNode {
           ev.connection.fromID === this.inputADSR?.id
         ) {
           this.inputADSR = null;
-        }
-        const upstream = this.engine.nodes.get(
-          ev.connection.fromID
-        ) as SynthADSR | null;
-        if (upstream) {
-          this.voices.forEach((voice) => {
-            upstream.get()?.disconnect(voice.gain.gain);
+          // Recreate all notes without ADSR
+          this.notes.forEach((note, noteNumber) => {
+            note.stop();
+            const newNote = new OscillatorNote(
+              this.engine,
+              this.config,
+              noteNumber,
+              null
+            );
+            this.notes.set(noteNumber, newNote);
+            newNote.getOutput().connect(this.masterGain);
+            if (this.notes.has(noteNumber)) {
+              newNote.start();
+            }
           });
-        }
-        break;
-      }
-      case "ConnectionEvent": {
-        const ev = event as ConnectionEvent;
-        const upstream = this.engine.nodes.get(ev.connection.fromID);
-        if (upstream instanceof SynthADSR) {
-          this.inputADSR = upstream;
-          this.voices.forEach((voice) => {
-            upstream.get()?.connect(voice.gain.gain);
-          });
-        } else {
-          this.engine.sendEvent(new DisconnectionEvent(ev.connection));
         }
         break;
       }
       case "NoteStartEvent": {
-        // based on unisonVoices, create that many voices
-        const targetVoices = this.config.unisonVoices ?? 1;
-        const spread = this.config.unisonSpread ?? 0;
-        const detune = this.config.detune ?? 0;
-        const stereo = this.config.unisonStereo ?? 0;
-        const phase = 0;
-        const context = this.engine.ctx;
-
-        for (let i = 0; i < targetVoices; i++) {
-          // Calculate voice position in the spread
-          const position =
-            targetVoices == 1 ? 0 : (i / (targetVoices - 1)) * 2 - 1; // -1 to 1
-          const voiceDetune = position * spread + detune;
-          const pan = position * stereo;
-
-          // Calculate random phase offset for this voice
-          const voicePhase =
-            phase !== 0
-              ? phase + Math.random() * 0.1 // Add small random variation to specified phase
-              : Math.random() * 2 * Math.PI; // Completely random phase
-
-          // Create voice nodes
-          const osc = context.createOscillator();
-          const panner = context.createStereoPanner();
-          const gain = context.createGain();
-          const delay = context.createDelay();
-          const levelGain = context.createGain(); // New gain node for level control
-
-          // Configure voice
-          osc.type = this.config.type;
-          osc.detune.value = voiceDetune;
-
-          // Connect with phase delay
-          osc.connect(delay);
-          delay.delayTime.value =
-            voicePhase / (2 * Math.PI * osc.frequency.value);
-          delay.connect(panner);
-          panner.pan.value = pan;
-          panner.connect(levelGain); // Connect to level gain first
-          levelGain.gain.value = this.config.level ?? 1.0; // Set the level
-          levelGain.connect(gain); // Then connect to the ADSR-controlled gain
-          gain.connect(this.masterGain);
-
-          // Get ADSR signal and connect it to the gain
-          if (this.inputADSR) {
-            const adsrSignal = this.inputADSR.getNoteADSR((event as NoteStartEvent).note).get();
-            gain.gain.value = 0;
-            adsrSignal.connect(gain.gain);
-          }
-
-          // Store voice with its phase
-          this.voices.push(
-            new OscillatorVoice(osc, panner, gain, delay, voicePhase)
-          );
-        }
-        this.voices.forEach((voice) => {
-          voice.osc.start();
-        });
+        const ev = event as NoteStartEvent;
+        const note = this.getNote(ev.note);
+        note.start();
         break;
       }
-      case "NoteStopEvent":
-        this.voices.forEach((voice) => {
-          if (this.inputADSR) {
-            // use release time to schedule a disconnect
-            const releaseTime = this.inputADSR.config.release * 1000;
-            setTimeout(() => {
-              voice.osc.stop();
-            }, releaseTime);
-          } else {
-            voice.osc.stop();
-          }
-        });
+      case "NoteStopEvent": {
+        const ev = event as NoteStopEvent;
+        const note = this.notes.get(ev.note);
+        if (note) {
+          this.notes.delete(ev.note);
+          note.stop();
+        }
         break;
+      }
     }
   }
 }
