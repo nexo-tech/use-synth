@@ -128,6 +128,7 @@ export class SynthEngine {
   }
 
   getNode(id: string): SynthNode | null {
+    console.log("getNode", id, this.nodes)
     return this.nodes.get(id) ?? null;
   }
 }

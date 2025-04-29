@@ -1,19 +1,26 @@
 "use client"
 
+import { SynthADSR } from "./adsr";
 import { Connection, ConnectionEvent, NodeCreateEvent, NoteStartEvent, NoteStopEvent } from "./base";
 import { SynthEngine } from "./engine";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 function Oscilloscope({ engine }: { engine: SynthEngine }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const analyser = useRef<AnalyserNode | null>(null);
 
   useEffect(() => {
-    if (!canvasRef.current) return;
+    if (!canvasRef.current) {
+      console.log("no canvas");
+      return;
+    }
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!ctx) {
+      console.log("no ctx");
+      return;
+    }
 
     // Create analyser node
     analyser.current = engine.ctx.createAnalyser();
@@ -22,11 +29,17 @@ function Oscilloscope({ engine }: { engine: SynthEngine }) {
     const dataArray = new Uint8Array(bufferLength);
 
     // Connect analyser to destination
-    engine.ctx.destination.connect(analyser.current);
+    const adsr = engine.nodes.get("adsr1") as SynthADSR | null;
+    const note = adsr?.getNoteADSR(60)
+    console.log("ADSR", adsr, note, engine)
+    note?.get()?.connect(analyser.current);
 
     // Animation loop
     function draw() {
-      if (!analyser.current || !ctx) return;
+      if (!analyser.current || !ctx) {
+        console.log("no analyser or ctx");
+        return;
+      }
 
       const WIDTH = canvas.width;
       const HEIGHT = canvas.height;
@@ -82,16 +95,17 @@ function Oscilloscope({ engine }: { engine: SynthEngine }) {
 }
 
 export default function OscillatorPage() {
-  const engineRef = useRef<SynthEngine | null>(null);
+  const [engineRef, setEngineRef] = useState<SynthEngine | null>(null);
+  useEffect(() => {
+    setEngineRef(new SynthEngine());
 
+  }, []);
+  const [render, setRender] = useState(0);
   return <div>
     <button onClick={() => {
       (async () => {
-        if (!engineRef.current) {
-          engineRef.current = new SynthEngine();
-          await engineRef.current.ctx.resume();
-        }
-        const engine = engineRef.current;
+        await engineRef!.ctx.resume();
+        const engine = engineRef!;
 
         engine.sendEvent(new NodeCreateEvent("osc1", "oscillator", {
           type: "sawtooth",
@@ -113,14 +127,17 @@ export default function OscillatorPage() {
         engine.sendEvent(new ConnectionEvent(new Connection("osc1", "output")));
         engine.sendEvent(new NoteStartEvent(60, 127));
         setTimeout(() => {
-          console.log("note off");
+          setRender(render + 1);
+        }, 500);
+
+        setTimeout(() => {
           engine.sendEvent(new NoteStopEvent(60));
         }, 1000);
       })();
     }}>Play</button>
 
     <div className="w-[100px] h-[100px] bg-black">
-      {engineRef.current && <Oscilloscope engine={engineRef.current} />}
+      {render && <Oscilloscope engine={engineRef!} />}
     </div>
   </div>
 }

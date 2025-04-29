@@ -131,8 +131,6 @@ export class SynthOscillator extends SynthNode {
               .getNoteADSR((event as NoteStartEvent).note)
               .get();
 
-            console.log("connecting to gain", adsrSignal, gain.gain);
-
             adsrSignal.connect(gain.gain);
           }
 
