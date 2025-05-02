@@ -1,8 +1,8 @@
 "use client"
 
 import Osc from "../components/Osc";
-import { Connection, ConnectionEvent, NodeCreateEvent, NoteStartEvent, NoteStopEvent } from "./base";
-import { ParameterChangeEvent, SynthEngine } from "./engine";
+import { ParameterChangeEvent, Connection, ConnectionEvent, NodeCreateEvent, NoteStartEvent, NoteStopEvent } from "./base";
+import { SynthEngine } from "./engine";
 import { useEffect, useRef, useState } from "react";
 
 const keyToNote: Record<string, number> = {

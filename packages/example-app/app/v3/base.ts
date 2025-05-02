@@ -59,7 +59,7 @@ export class NodeCreateEvent<T> extends SynthEvent {
     config: T
   ) {
     super();
-    this.id = id; 
+    this.id = id;
     this.type = type;
     this.config = config;
   }
@@ -71,4 +71,21 @@ export class NodeDeleteEvent extends SynthEvent {
     super();
     this.id = id;
   }
+}
+
+export class ParameterChangeEvent<T> implements SynthEvent {
+  constructor(
+    public readonly id: string,
+    public readonly parameter: string,
+    public readonly value: T
+  ) {}
+}
+
+export class ParameterUpdatedEvent<T> implements SynthEvent {
+  constructor(
+    public readonly id: string,
+    public readonly parameter: string,
+    public readonly value: T,
+    public readonly oldValue: T
+  ) {}
 }

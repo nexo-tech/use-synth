@@ -104,23 +104,6 @@ interface Modulation {
   amount: number; // -1 to 1
 }
 
-export class ParameterChangeEvent<T> implements SynthEvent {
-  constructor(
-    public readonly id: string,
-    public readonly parameter: string,
-    public readonly value: T
-  ) {}
-}
-
-export class ParameterUpdatedEvent<T> implements SynthEvent {
-  constructor(
-    public readonly id: string,
-    public readonly parameter: string,
-    public readonly value: T,
-    public readonly oldValue: T
-  ) {}
-}
-
 export class ModulationEvent implements SynthEvent {
   constructor(
     public readonly fromID: string,

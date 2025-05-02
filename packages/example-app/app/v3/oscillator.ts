@@ -6,6 +6,8 @@ import {
   NoteStopEvent,
   SynthEvent,
   SynthNode,
+  ParameterChangeEvent,
+  ParameterUpdatedEvent,
 } from "./base";
 import { SynthADSR } from "./adsr";
 
@@ -121,6 +123,10 @@ class OscillatorNote {
   getOutput(): AudioNode {
     return this.adsrGain;
   }
+
+  updateLevel(level: number) {
+    this.levelGain.gain.value = level;
+  }
 }
 
 export class SynthOscillator extends SynthNode {
@@ -161,6 +167,26 @@ export class SynthOscillator extends SynthNode {
 
   observe(event: SynthEvent): void {
     switch (event.constructor.name) {
+      case "ParameterChangeEvent": {
+        const ev = event as ParameterChangeEvent<number>;
+        if (ev.id !== this.id) return;
+
+        if (ev.parameter === "level") {
+          const oldValue = this.config.level ?? 1.0;
+          this.config.level = ev.value;
+
+          // Update all notes with new level
+          this.notes.forEach((note) => {
+            note.updateLevel(ev.value);
+          });
+
+          // Emit parameter updated event
+          this.engine.sendEvent(
+            new ParameterUpdatedEvent(this.id, "level", ev.value, oldValue)
+          );
+        }
+        break;
+      }
       case "ConnectionEvent": {
         const ev = event as ConnectionEvent;
         const upstream = this.engine.nodes.get(ev.connection.fromID);
