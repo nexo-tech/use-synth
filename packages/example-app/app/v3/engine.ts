@@ -104,6 +104,15 @@ interface Modulation {
   amount: number; // -1 to 1
 }
 
+export class ModulationEvent implements SynthEvent {
+  constructor(
+    public readonly fromID: string,
+    public readonly toID: string,
+    public readonly parameter: string,
+    public readonly amount: number
+  ) {}
+}
+
 class Modulations {
   private modulations: Set<Modulation> = new Set();
   private fromTo: Map<string, Map<string, Set<Modulation>>> = new Map();
@@ -144,6 +153,22 @@ class Modulations {
     this.toFrom.get(toID)!.get(fromID)!.add(modulation);
     this.modulations.add(modulation);
     return true;
+  }
+
+  updateModulation(fromID: string, toID: string, parameter: string, amount: number): boolean {
+    // Clamp amount between -1 and 1
+    amount = Math.max(-1, Math.min(1, amount));
+
+    const modulations = this.fromTo.get(fromID)?.get(toID);
+    if (!modulations) return false;
+
+    for (const mod of modulations) {
+      if (mod.parameter === parameter) {
+        mod.amount = amount;
+        return true;
+      }
+    }
+    return false;
   }
 
   removeModulation(modulation: Modulation): boolean {
@@ -205,6 +230,44 @@ class Modulations {
 
   getAllModulations(): Modulation[] {
     return Array.from(this.modulations);
+  }
+
+  handleModulation(fromID: string, toID: string, parameter: string, amount: number): boolean {
+    // Clamp amount between -1 and 1
+    amount = Math.max(-1, Math.min(1, amount));
+
+    // If amount is 0, remove the modulation if it exists
+    if (amount === 0) {
+      const existingModulation = this.findModulation(fromID, toID, parameter);
+      if (existingModulation) {
+        return this.removeModulation(existingModulation);
+      }
+      return false;
+    }
+
+    // Check if modulation already exists
+    const existingModulation = this.findModulation(fromID, toID, parameter);
+    if (existingModulation) {
+      // Update existing modulation
+      existingModulation.amount = amount;
+      return true;
+    }
+
+    // Create new modulation
+    const modulation: Modulation = { fromID, toID, parameter, amount };
+    return this.addModulation(modulation);
+  }
+
+  private findModulation(fromID: string, toID: string, parameter: string): Modulation | null {
+    const modulations = this.fromTo.get(fromID)?.get(toID);
+    if (!modulations) return null;
+
+    for (const mod of modulations) {
+      if (mod.parameter === parameter) {
+        return mod;
+      }
+    }
+    return null;
   }
 }
 
@@ -284,6 +347,11 @@ export class SynthEngine {
           this.modulations.removeModulation(modulation);
         }
         this.nodes.delete(ev.id);
+        break;
+      }
+      case "ModulationEvent": {
+        const ev = event as ModulationEvent;
+        this.modulations.handleModulation(ev.fromID, ev.toID, ev.parameter, ev.amount);
         break;
       }
     }
