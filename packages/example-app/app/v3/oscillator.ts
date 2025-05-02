@@ -101,9 +101,9 @@ class OscillatorNote {
     this.voices.forEach((voice) => voice.osc.start());
   }
 
-  stop() {
+  stop(immediate: boolean = false) {
     this.voices.forEach((voice) => {
-      if (this.inputADSR) {
+      if (this.inputADSR && !immediate) {
         const releaseTime = this.inputADSR.config.release * 1000;
         setTimeout(() => {
           voice.osc.stop();
@@ -237,6 +237,32 @@ export class SynthOscillator extends SynthNode {
           // Emit parameter updated event
           this.engine.sendEvent(
             new ParameterUpdatedEvent(this.id, "detune", newDetune, oldValue)
+          );
+        } else if (ev.parameter === "unisonVoices") {
+          // Clamp voices between 1 and 8
+          const newVoices = Math.max(1, Math.min(8, Math.round(ev.value)));
+          const oldValue = this.config.unisonVoices ?? 1;
+          this.config.unisonVoices = newVoices;
+
+          // Recreate all notes with new voice count
+          this.notes.forEach((note, noteNumber) => {
+            note.stop(true);
+            const newNote = new OscillatorNote(
+              this.engine,
+              this.config,
+              noteNumber,
+              this.inputADSR
+            );
+            this.notes.set(noteNumber, newNote);
+            newNote.getOutput().connect(this.masterGain);
+            if (this.notes.has(noteNumber)) {
+              newNote.start();
+            }
+          });
+
+          // Emit parameter updated event
+          this.engine.sendEvent(
+            new ParameterUpdatedEvent(this.id, "unisonVoices", newVoices, oldValue)
           );
         }
         break;

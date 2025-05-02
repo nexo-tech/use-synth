@@ -114,7 +114,7 @@ export const Osc: React.FC<OscProps> = ({ config, onConfigChange }) => {
                                 label="Voices"
                                 value={config.unisonVoices}
                                 min={1}
-                                max={16}
+                                max={8}
                                 size="sm"
                                 onChange={handleUnisonVoicesChange}
                             />
