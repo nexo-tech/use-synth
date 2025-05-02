@@ -58,7 +58,9 @@ export default function OscillatorPage() {
     // Initialize audio context
     engine.current.ctx.resume();
     bumpUI(prev => prev + 1);
+  }, []);
 
+  useEffect(() => {
     const handleKeyDown = async (e: KeyboardEvent) => {
       if (!engine.current) {
         return;

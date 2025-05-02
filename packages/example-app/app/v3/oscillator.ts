@@ -70,7 +70,9 @@ class OscillatorNote {
 
       osc.type = this.config.type;
       osc.detune.value = voiceDetune;
-      osc.frequency.value = 440 * Math.pow(2, (this.note - 69) / 12);
+      const baseFrequency = 440 * Math.pow(2, (this.note - 69) / 12);
+      const pitch = this.config.pitch ?? 0;
+      osc.frequency.value = baseFrequency * Math.pow(2, pitch / 12);
 
       osc.connect(delay);
       delay.delayTime.value = voicePhase / (2 * Math.PI * osc.frequency.value);
