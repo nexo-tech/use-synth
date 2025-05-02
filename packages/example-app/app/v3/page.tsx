@@ -5,104 +5,31 @@ import { Connection, ConnectionEvent, NodeCreateEvent, NoteStartEvent, NoteStopE
 import { SynthEngine } from "./engine";
 import { useEffect, useRef, useState } from "react";
 
-function Oscilloscope({ engine }: { engine: SynthEngine }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const analyser = useRef<AnalyserNode | null>(null);
-
-  useEffect(() => {
-    if (!canvasRef.current) {
-      console.log("no canvas");
-      return;
-    }
-
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      console.log("no ctx");
-      return;
-    }
-
-    // Create analyser node
-    analyser.current = engine.ctx.createAnalyser();
-    analyser.current.fftSize = 2048;
-    const bufferLength = analyser.current.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-
-    // Connect analyser to destination
-    const adsr = engine.nodes.get("adsr1") as SynthADSR | null;
-    // let note = engine.nodes.get("osc1") // works
-    let note = adsr?.getNoteADSR(60) // doesn't work!
-    console.log("ADSR", note?.get())
-    note?.get()?.connect(analyser.current);
-
-    // Animation loop
-    function draw() {
-      if (!analyser.current || !ctx) {
-        console.log("no analyser or ctx");
-        return;
-      }
-
-      const WIDTH = canvas.width;
-      const HEIGHT = canvas.height;
-
-      analyser.current.getByteTimeDomainData(dataArray);
-
-      ctx.fillStyle = 'rgb(0, 0, 0)';
-      ctx.fillRect(0, 0, WIDTH, HEIGHT);
-
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = 'rgb(0, 255, 0)';
-      ctx.beginPath();
-
-      const sliceWidth = WIDTH * 1.0 / bufferLength;
-      let x = 0;
-
-      for (let i = 0; i < bufferLength; i++) {
-        const v = dataArray[i] / 128.0;
-        const y = v * HEIGHT / 2;
-
-        if (i === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
-        }
-
-        x += sliceWidth;
-      }
-
-      ctx.lineTo(WIDTH, HEIGHT / 2);
-      ctx.stroke();
-
-      requestAnimationFrame(draw);
-    }
-
-    draw();
-
-    return () => {
-      if (analyser.current) {
-        analyser.current.disconnect();
-      }
-    };
-  }, [engine]);
-
-  return (
-    <canvas
-      ref={canvasRef}
-      width={800}
-      height={200}
-      style={{ border: '1px solid #ccc' }}
-    />
-  );
-}
+const keyToNote: Record<string, number> = {
+  'a': 60, // C4
+  'w': 61, // C#4
+  's': 62, // D4
+  'e': 63, // D#4
+  'd': 64, // E4
+  'f': 65, // F4
+  't': 66, // F#4
+  'g': 67, // G4
+  'y': 68, // G#4
+  'h': 69, // A4
+  'u': 70, // A#4
+  'j': 71, // B4
+  'k': 72, // C5
+};
 
 export default function OscillatorPage() {
-  const [engineRef, setEngineRef] = useState<SynthEngine | null>(null);
+  const engine = useRef<SynthEngine | null>(null);
+  const [octave, setOctave] = useState(4);
+  const activeNotes = useRef(new Set<string>());
+
   useEffect(() => {
-    const engine = new SynthEngine();
-    setEngineRef(engine);
+    engine.current = new SynthEngine();
 
-
-    engine.sendEvent(new NodeCreateEvent("osc1", "oscillator", {
+    engine.current.sendEvent(new NodeCreateEvent("osc1", "oscillator", {
       type: "sawtooth",
       detune: -7,
       level: 0.5,
@@ -111,38 +38,87 @@ export default function OscillatorPage() {
       unisonStereo: 50,
     }));
 
-    engine.sendEvent(new NodeCreateEvent("adsr1", "adsr", {
+    engine.current.sendEvent(new NodeCreateEvent("adsr1", "adsr", {
       attack: 0.1,
       decay: 0.4,
       sustain: 0.5,
-      release: 1,
+      release: 0.2,
     }));
 
-    engine.sendEvent(new ConnectionEvent(new Connection("adsr1", "osc1")));
-    engine.sendEvent(new ConnectionEvent(new Connection("osc1", "output")));
+    engine.current.sendEvent(new ConnectionEvent(new Connection("adsr1", "osc1")));
+    engine.current.sendEvent(new ConnectionEvent(new Connection("osc1", "output")));
 
+    // Initialize audio context
+    engine.current.ctx.resume();
 
-  }, []);
-  const [render, setRender] = useState(0);
-  return <div>
-    <button onClick={() => {
-      (async () => {
-        await engineRef!.ctx.resume();
-        const engine = engineRef!;
+    const handleKeyDown = async (e: KeyboardEvent) => {
+      if (!engine.current) {
+        return;
+      }
+      if (e.repeat) {
+        return;
+      }
 
-        engine.sendEvent(new NoteStartEvent(60, 127));
-        setTimeout(() => {
-          setRender(render + 1);
-        }, 500);
+      const key = e.key.toLowerCase();
 
-        setTimeout(() => {
-          engine.sendEvent(new NoteStopEvent(60));
-        }, 1000);
-      })();
-    }}>Play</button>
+      // Handle octave changes
+      if (key === 'z' && octave > 0) {
+        setOctave(prev => prev - 1);
+        return;
+      }
+      if (key === 'x' && octave < 8) {
+        setOctave(prev => prev + 1);
+        return;
+      }
 
-    <div className="w-[100px] h-[100px] bg-black">
-      {render && <Oscilloscope engine={engineRef!} />}
+      // Handle note playing
+      const baseNote = keyToNote[key];
+      if (baseNote !== undefined && !activeNotes.current.has(key)) {
+        const note = baseNote + (octave - 4) * 12;
+        activeNotes.current.add(key);
+        try {
+          console.log("playing note", note);
+          await engine.current.ctx.resume();
+          engine.current.sendEvent(new NoteStartEvent(note, 127));
+        } catch (error) {
+          console.error('Error playing note:', error);
+        }
+      }
+    };
+
+    const handleKeyUp = async (e: KeyboardEvent) => {
+      if (!engine.current) return;
+
+      const key = e.key.toLowerCase();
+      const baseNote = keyToNote[key];
+      if (baseNote !== undefined && activeNotes.current.has(key)) {
+        const note = baseNote + (octave - 4) * 12;
+        activeNotes.current.delete(key);
+        try {
+          engine.current.sendEvent(new NoteStopEvent(note));
+        } catch (error) {
+          console.error('Error stopping note:', error);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [octave]);
+
+  return (
+    <div>
+      <div className="mb-4">
+        <p>Current octave: {octave}</p>
+        <p>White keys: A-S-D-F-G-H-J-K</p>
+        <p>Black keys: W-E-R-T-Y-U</p>
+        <p>Use Z/X to change octave</p>
+      </div>
     </div>
-  </div>
+  );
 }

@@ -56,8 +56,8 @@ class NoteADSR {
     this.isPlaying = false;
 
     const now = this.engine.ctx.currentTime;
-    this.cv.offset.cancelScheduledValues(now);
-    this.cv.offset.setValueAtTime(this.cv.offset.value, now);
+    // this.cv.offset.cancelScheduledValues(now);
+    // this.cv.offset.setValueAtTime(this.cv.offset.value, now);
     this.cv.offset.linearRampToValueAtTime(0, now + this.config.release);
     setTimeout(() => {
       this.cv.stop();
