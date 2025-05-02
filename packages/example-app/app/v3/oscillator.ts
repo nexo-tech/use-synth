@@ -164,6 +164,13 @@ class OscillatorNote {
       panner.pan.value = voiceStereo;
     });
   }
+
+  updateType(type: OscillatorConfig["type"]) {
+    // Update wave type for all voices
+    this.voices.forEach((voice) => {
+      voice.osc.type = type;
+    });
+  }
 }
 
 export class SynthOscillator extends SynthNode {
@@ -206,7 +213,7 @@ export class SynthOscillator extends SynthNode {
   observe(event: SynthEvent): void {
     switch (event.constructor.name) {
       case "ParameterChangeEvent": {
-        const ev = event as ParameterChangeEvent<number>;
+        const ev = event as ParameterChangeEvent<any>;
         if (ev.id !== this.id) return;
 
         if (ev.parameter === "level") {
@@ -322,6 +329,19 @@ export class SynthOscillator extends SynthNode {
               newStereo,
               oldValue
             )
+          );
+        } else if (ev.parameter === "type") {
+          const oldValue = this.config.type;
+          this.config.type = ev.value;
+
+          // Update all notes with new wave type
+          this.notes.forEach((note) => {
+            note.updateType(this.config.type);
+          });
+
+          // Emit parameter updated event
+          this.engine.sendEvent(
+            new ParameterUpdatedEvent(this.id, "type", ev.value, oldValue)
           );
         }
         break;
