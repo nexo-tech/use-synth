@@ -127,12 +127,29 @@ class OscillatorNote {
   updateLevel(level: number) {
     this.levelGain.gain.value = level;
   }
+
+  updatePitch(pitch: number) {
+    // Update frequency based on pitch offset
+    const baseFrequency = 440 * Math.pow(2, (this.note - 69) / 12);
+    const newFrequency = baseFrequency * Math.pow(2, pitch / 12);
+    this.voices.forEach((voice) => {
+      voice.osc.frequency.value = newFrequency;
+    });
+  }
+
+  updateDetune(detune: number) {
+    // Update detune in cents (100 cents = 1 semitone)
+    this.voices.forEach((voice) => {
+      voice.osc.detune.value = detune;
+    });
+  }
 }
 
 export class SynthOscillator extends SynthNode {
   private masterGain: GainNode;
   private notes: Map<number, OscillatorNote> = new Map();
   private inputADSR: SynthADSR | null = null;
+
   getConfig(): OscillatorConfig {
     return this.config;
   }
@@ -183,6 +200,36 @@ export class SynthOscillator extends SynthNode {
           // Emit parameter updated event
           this.engine.sendEvent(
             new ParameterUpdatedEvent(this.id, "level", ev.value, oldValue)
+          );
+        } else if (ev.parameter === "pitch") {
+          // Clamp pitch between -24 and +24 semitones
+          const newPitch = Math.max(-24, Math.min(24, ev.value));
+          const oldValue = this.config.pitch ?? 0;
+          this.config.pitch = newPitch;
+
+          // Update all notes with new pitch
+          this.notes.forEach((note) => {
+            note.updatePitch(newPitch);
+          });
+
+          // Emit parameter updated event
+          this.engine.sendEvent(
+            new ParameterUpdatedEvent(this.id, "pitch", newPitch, oldValue)
+          );
+        } else if (ev.parameter === "detune") {
+          // Clamp detune between -100 and +100 cents
+          const newDetune = Math.max(-100, Math.min(100, ev.value));
+          const oldValue = this.config.detune ?? 0;
+          this.config.detune = newDetune;
+
+          // Update all notes with new detune
+          this.notes.forEach((note) => {
+            note.updateDetune(newDetune);
+          });
+
+          // Emit parameter updated event
+          this.engine.sendEvent(
+            new ParameterUpdatedEvent(this.id, "detune", newDetune, oldValue)
           );
         }
         break;

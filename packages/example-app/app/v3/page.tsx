@@ -33,6 +33,7 @@ export default function OscillatorPage() {
     engine.current = new SynthEngine();
     engine.current.observe("ParameterUpdatedEvent", (e) => {
       bumpUI(prev => prev + 1);
+      console.log("parameter updated", e);
     });
 
     engine.current.sendEvent(new NodeCreateEvent("osc1", "oscillator", {
@@ -124,6 +125,7 @@ export default function OscillatorPage() {
         <Osc config={x[1]} onConfigChange={(c) => {
           for (let k in c) {
             const v = (c as Record<string, any>)[k];
+            console.log("changing", k, v);
             engine.current?.sendEvent(new ParameterChangeEvent<any>(x[0], k, v));
           }
         }} />
