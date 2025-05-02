@@ -143,11 +143,25 @@ class OscillatorNote {
     // Update detune in cents (100 cents = 1 semitone)
     const targetVoices = this.config.unisonVoices ?? 1;
     const spread = this.config.unisonSpread ?? 0;
-    
+
     this.voices.forEach((voice, i) => {
       const position = targetVoices == 1 ? 0 : (i / (targetVoices - 1)) * 2 - 1;
       const voiceDetune = position * spread + detune;
       voice.osc.detune.value = voiceDetune;
+    });
+  }
+
+  updateStereo(stereo: number) {
+    // Update stereo spread
+    const targetVoices = this.config.unisonVoices ?? 1;
+    const spread = this.config.unisonSpread ?? 0;
+
+    this.voices.forEach((voice, i) => {
+      const position = targetVoices == 1 ? 0 : (i / (targetVoices - 1)) * 2 - 1;
+      // Convert stereo from 0-100 range to -1 to 1 range
+      const voiceStereo = position * (stereo / 100);
+      const panner = voice.panner;
+      panner.pan.value = voiceStereo;
     });
   }
 }
@@ -262,7 +276,53 @@ export class SynthOscillator extends SynthNode {
 
           // Emit parameter updated event
           this.engine.sendEvent(
-            new ParameterUpdatedEvent(this.id, "unisonVoices", newVoices, oldValue)
+            new ParameterUpdatedEvent(
+              this.id,
+              "unisonVoices",
+              newVoices,
+              oldValue
+            )
+          );
+        } else if (ev.parameter === "unisonSpread") {
+          // Clamp spread between 0 and 100 cents
+          const newSpread = Math.max(0, Math.min(100, ev.value));
+          const oldValue = this.config.unisonSpread ?? 0;
+          this.config.unisonSpread = newSpread;
+
+          // Update all notes with new spread
+          this.notes.forEach((note) => {
+            note.updateDetune(this.config.detune ?? 0);
+          });
+
+          // Emit parameter updated event
+          this.engine.sendEvent(
+            new ParameterUpdatedEvent(
+              this.id,
+              "unisonSpread",
+              newSpread,
+              oldValue
+            )
+          );
+        } else if (ev.parameter === "unisonStereo") {
+          // Clamp stereo between 0 and 100
+          console.log("unisonStereo", ev.value);
+          const newStereo = Math.max(0, Math.min(100, ev.value));
+          const oldValue = this.config.unisonStereo ?? 0;
+          this.config.unisonStereo = newStereo;
+
+          // Update all notes with new stereo spread
+          this.notes.forEach((note) => {
+            note.updateStereo(newStereo);
+          });
+
+          // Emit parameter updated event
+          this.engine.sendEvent(
+            new ParameterUpdatedEvent(
+              this.id,
+              "unisonStereo",
+              newStereo,
+              oldValue
+            )
           );
         }
         break;
