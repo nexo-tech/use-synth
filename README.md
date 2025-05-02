@@ -46,7 +46,7 @@ A modern, modular synthesizer framework built with TypeScript and Web Audio API.
 ### Installation
 
 ```bash
-git clone https://github.com/yourusername/useSynth.git
+git clone https://github.com/nexo-tech/useSynth.git
 cd useSynth
 bun install
 ```
