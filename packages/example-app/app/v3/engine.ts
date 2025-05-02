@@ -97,10 +97,122 @@ class Connections {
   }
 }
 
+interface Modulation {
+  fromID: string;
+  toID: string;
+  parameter: string;
+  amount: number; // -1 to 1
+}
+
+class Modulations {
+  private modulations: Set<Modulation> = new Set();
+  private fromTo: Map<string, Map<string, Set<Modulation>>> = new Map();
+  private toFrom: Map<string, Map<string, Set<Modulation>>> = new Map();
+
+  addModulation(modulation: Modulation): boolean {
+    const { fromID, toID, parameter, amount } = modulation;
+
+    // Clamp amount between -1 and 1
+    modulation.amount = Math.max(-1, Math.min(1, amount));
+
+    // Initialize maps if they don't exist
+    if (!this.fromTo.has(fromID)) {
+      this.fromTo.set(fromID, new Map());
+    }
+    if (!this.toFrom.has(toID)) {
+      this.toFrom.set(toID, new Map());
+    }
+
+    // Initialize parameter sets if they don't exist
+    if (!this.fromTo.get(fromID)!.has(toID)) {
+      this.fromTo.get(fromID)!.set(toID, new Set());
+    }
+    if (!this.toFrom.get(toID)!.has(fromID)) {
+      this.toFrom.get(toID)!.set(fromID, new Set());
+    }
+
+    // Check if modulation already exists
+    const existingModulations = this.fromTo.get(fromID)!.get(toID)!;
+    for (const mod of existingModulations) {
+      if (mod.parameter === parameter) {
+        return false;
+      }
+    }
+
+    // Add modulation to both maps
+    this.fromTo.get(fromID)!.get(toID)!.add(modulation);
+    this.toFrom.get(toID)!.get(fromID)!.add(modulation);
+    this.modulations.add(modulation);
+    return true;
+  }
+
+  removeModulation(modulation: Modulation): boolean {
+    const { fromID, toID, parameter } = modulation;
+    
+    // Remove modulation from both maps
+    const fromModulations = this.fromTo.get(fromID)?.get(toID);
+    const toModulations = this.toFrom.get(toID)?.get(fromID);
+    
+    if (fromModulations && toModulations) {
+      for (const mod of fromModulations) {
+        if (mod.parameter === parameter) {
+          fromModulations.delete(mod);
+          toModulations.delete(mod);
+          return this.modulations.delete(mod);
+        }
+      }
+    }
+    return false;
+  }
+
+  getModulationsFrom(fromID: string): Modulation[] {
+    const result: Modulation[] = [];
+    const toMap = this.fromTo.get(fromID);
+    if (toMap) {
+      for (const modulations of toMap.values()) {
+        result.push(...modulations);
+      }
+    }
+    return result;
+  }
+
+  getModulationsTo(toID: string): Modulation[] {
+    const result: Modulation[] = [];
+    const fromMap = this.toFrom.get(toID);
+    if (fromMap) {
+      for (const modulations of fromMap.values()) {
+        result.push(...modulations);
+      }
+    }
+    return result;
+  }
+
+  getModulationsBetween(fromID: string, toID: string): Modulation[] {
+    return Array.from(this.fromTo.get(fromID)?.get(toID) ?? []);
+  }
+
+  hasModulation(fromID: string, toID: string, parameter: string): boolean {
+    const modulations = this.fromTo.get(fromID)?.get(toID);
+    if (!modulations) return false;
+    
+    for (const mod of modulations) {
+      if (mod.parameter === parameter) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  getAllModulations(): Modulation[] {
+    return Array.from(this.modulations);
+  }
+}
+
 export class SynthEngine {
   nodes: Map<string, SynthNode> = new Map();
   ctx: AudioContext;
   connections: Connections = new Connections();
+  modulations: Modulations = new Modulations();
   notes: Map<number, boolean> = new Map();
 
   constructor() {
@@ -165,6 +277,11 @@ export class SynthEngine {
         const connections = this.connections.getConnectionsFrom(ev.id);
         for (const connection of connections) {
           this.sendEvent(new DisconnectionEvent(connection));
+        }
+        // Find all modulations that connect to this node
+        const modulations = this.modulations.getModulationsFrom(ev.id);
+        for (const modulation of modulations) {
+          this.modulations.removeModulation(modulation);
         }
         this.nodes.delete(ev.id);
         break;
