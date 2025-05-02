@@ -305,7 +305,6 @@ export class SynthOscillator extends SynthNode {
           );
         } else if (ev.parameter === "unisonStereo") {
           // Clamp stereo between 0 and 100
-          console.log("unisonStereo", ev.value);
           const newStereo = Math.max(0, Math.min(100, ev.value));
           const oldValue = this.config.unisonStereo ?? 0;
           this.config.unisonStereo = newStereo;
@@ -378,14 +377,12 @@ export class SynthOscillator extends SynthNode {
         break;
       }
       case "NoteStartEvent": {
-        console.log(event.constructor.name, "a");
         const ev = event as NoteStartEvent;
         const note = this.getNote(ev.note);
         note.start();
         break;
       }
       case "NoteStopEvent": {
-        console.log(event.constructor.name, "a");
         const ev = event as NoteStopEvent;
         const note = this.notes.get(ev.note);
         if (note) {
