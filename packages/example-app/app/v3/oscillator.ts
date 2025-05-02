@@ -127,6 +127,9 @@ export class SynthOscillator extends SynthNode {
   private masterGain: GainNode;
   private notes: Map<number, OscillatorNote> = new Map();
   private inputADSR: SynthADSR | null = null;
+  getConfig(): OscillatorConfig {
+    return this.config;
+  }
 
   constructor(
     public readonly id: string,

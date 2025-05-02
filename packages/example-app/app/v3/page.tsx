@@ -1,8 +1,8 @@
 "use client"
 
-import { SynthADSR } from "./adsr";
+import Osc from "../components/Osc";
 import { Connection, ConnectionEvent, NodeCreateEvent, NoteStartEvent, NoteStopEvent } from "./base";
-import { SynthEngine } from "./engine";
+import { ParameterChangeEvent, SynthEngine } from "./engine";
 import { useEffect, useRef, useState } from "react";
 
 const keyToNote: Record<string, number> = {
@@ -25,9 +25,15 @@ export default function OscillatorPage() {
   const engine = useRef<SynthEngine | null>(null);
   const [octave, setOctave] = useState(4);
   const activeNotes = useRef(new Set<string>());
+  const oscillators = engine.current?.getOscillators().map(x => [x.id, x.getConfig()] as const);
+  const [, bumpUI] = useState(0);
+  console.log(engine.current, oscillators)
 
   useEffect(() => {
     engine.current = new SynthEngine();
+    engine.current.observe("ParameterUpdatedEvent", (e) => {
+      bumpUI(prev => prev + 1);
+    });
 
     engine.current.sendEvent(new NodeCreateEvent("osc1", "oscillator", {
       type: "sawtooth",
@@ -50,6 +56,7 @@ export default function OscillatorPage() {
 
     // Initialize audio context
     engine.current.ctx.resume();
+    bumpUI(prev => prev + 1);
 
     const handleKeyDown = async (e: KeyboardEvent) => {
       if (!engine.current) {
@@ -113,6 +120,14 @@ export default function OscillatorPage() {
 
   return (
     <div>
+      {oscillators?.map(x => <div key={x[0]}>
+        <Osc config={x[1]} onConfigChange={(c) => {
+          for (let k in c) {
+            const v = (c as Record<string, any>)[k];
+            engine.current?.sendEvent(new ParameterChangeEvent<any>(x[0], k, v));
+          }
+        }} />
+      </div>)}
       <div className="mb-4">
         <p>Current octave: {octave}</p>
         <p>White keys: A-S-D-F-G-H-J-K</p>
