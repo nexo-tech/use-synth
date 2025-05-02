@@ -139,8 +139,13 @@ class OscillatorNote {
 
   updateDetune(detune: number) {
     // Update detune in cents (100 cents = 1 semitone)
-    this.voices.forEach((voice) => {
-      voice.osc.detune.value = detune;
+    const targetVoices = this.config.unisonVoices ?? 1;
+    const spread = this.config.unisonSpread ?? 0;
+    
+    this.voices.forEach((voice, i) => {
+      const position = targetVoices == 1 ? 0 : (i / (targetVoices - 1)) * 2 - 1;
+      const voiceDetune = position * spread + detune;
+      voice.osc.detune.value = voiceDetune;
     });
   }
 }
