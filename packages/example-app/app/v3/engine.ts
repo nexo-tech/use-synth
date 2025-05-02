@@ -43,14 +43,64 @@ class DestinationNode implements SynthNode {
   }
 }
 
+class Connections {
+  private connections: Set<Connection> = new Set();
+  private fromTo: Map<string, Map<string, Connection>> = new Map();
+  private toFrom: Map<string, Map<string, Connection>> = new Map();
+
+  addConnection(connection: Connection): boolean {
+    const { fromID, toID } = connection;
+
+    // Initialize maps if they don't exist
+    if (!this.fromTo.has(fromID)) {
+      this.fromTo.set(fromID, new Map());
+    }
+    if (!this.toFrom.has(toID)) {
+      this.toFrom.set(toID, new Map());
+    }
+
+    // Check if connection already exists
+    if (this.fromTo.get(fromID)?.has(toID)) {
+      return false;
+    }
+
+    // Add connection to both maps
+    this.fromTo.get(fromID)!.set(toID, connection);
+    this.toFrom.get(toID)!.set(fromID, connection);
+    this.connections.add(connection);
+    return true;
+  }
+
+  removeConnection(connection: Connection): boolean {
+    const { fromID, toID } = connection;
+    
+    // Remove connection from both maps
+    this.fromTo.get(fromID)?.delete(toID);
+    this.toFrom.get(toID)?.delete(fromID);
+    return this.connections.delete(connection);
+  }
+
+  getConnectionsFrom(fromID: string): Connection[] {
+    return Array.from(this.fromTo.get(fromID)?.values() ?? []);
+  }
+
+  getConnectionsTo(toID: string): Connection[] {
+    return Array.from(this.toFrom.get(toID)?.values() ?? []);
+  }
+
+  hasConnection(fromID: string, toID: string): boolean {
+    return this.fromTo.get(fromID)?.has(toID) ?? false;
+  }
+
+  getAllConnections(): Connection[] {
+    return Array.from(this.connections);
+  }
+}
+
 export class SynthEngine {
   nodes: Map<string, SynthNode> = new Map();
   ctx: AudioContext;
-
-  connections: Set<Connection> = new Set();
-  fromTo: Map<string, Map<string, Connection>> = new Map();
-  toFrom: Map<string, Map<string, Connection>> = new Map();
-
+  connections: Connections = new Connections();
   notes: Map<number, boolean> = new Map();
 
   constructor() {
@@ -80,34 +130,12 @@ export class SynthEngine {
       }
       case "ConnectionEvent": {
         const ev = event as ConnectionEvent;
-        const { fromID, toID } = ev.connection;
-
-        // Initialize maps if they don't exist
-        if (!this.fromTo.has(fromID)) {
-          this.fromTo.set(fromID, new Map());
-        }
-        if (!this.toFrom.has(toID)) {
-          this.toFrom.set(toID, new Map());
-        }
-
-        // Add connection to both maps
-        // check if such connection already exists
-        if (this.fromTo.get(fromID)?.has(toID)) {
-          return;
-        }
-        this.fromTo.get(fromID)!.set(toID, ev.connection);
-        this.toFrom.get(toID)!.set(fromID, ev.connection);
-        this.connections.add(ev.connection);
+        this.connections.addConnection(ev.connection);
         break;
       }
       case "DisconnectionEvent": {
         const ev = event as DisconnectionEvent;
-        const { fromID, toID } = ev.connection;
-
-        // Remove connection from both maps
-        this.fromTo.get(fromID)?.delete(toID);
-        this.toFrom.get(toID)?.delete(fromID);
-        this.connections.delete(ev.connection);
+        this.connections.removeConnection(ev.connection);
         break;
       }
       case "NodeCreateEvent": {
@@ -134,11 +162,9 @@ export class SynthEngine {
           return;
         }
         // Find all connections that connect to this node
-        const connections = this.fromTo.get(ev.id);
-        if (connections) {
-          for (const connection of connections.values()) {
-            this.sendEvent(new DisconnectionEvent(connection));
-          }
+        const connections = this.connections.getConnectionsFrom(ev.id);
+        for (const connection of connections) {
+          this.sendEvent(new DisconnectionEvent(connection));
         }
         this.nodes.delete(ev.id);
         break;
@@ -159,7 +185,6 @@ export class SynthEngine {
   }
 
   getNode(id: string): SynthNode | null {
-    console.log("getNode", id, this.nodes);
     return this.nodes.get(id) ?? null;
   }
 }
