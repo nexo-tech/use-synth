@@ -1,6 +1,8 @@
 "use client";
 
+import { Envelope } from "../components/Envelope";
 import Osc from "../components/Osc";
+import { EnvelopeConfig } from "../page";
 import { ParameterChangeEvent } from "./base";
 import { useEngine } from "./hooks/use-engine";
 import { useKeyboardNotes } from "./hooks/use-keyboard-notes";
@@ -12,10 +14,13 @@ export default function OscillatorPage() {
   const oscillators = engine.current
     ?.getOscillators()
     .map((x) => [x.id, x.getConfig()] as const);
+  const envelopes = engine.current
+    ?.getEnvelopes()
+    .map((x) => [x.id, x.getConfig()] as const);
 
   return (
     <main className="flex min-h-screen flex-col items-center p-8 bg-gray-950 text-white">
-      <div>
+      <div className="flex flex-col gap-2">
         {oscillators?.map((x) => (
           <div key={x[0]}>
             <Osc
@@ -31,6 +36,23 @@ export default function OscillatorPage() {
             />
           </div>
         ))}
+
+        {envelopes?.map((x) => (
+          <div key={x[0]}>
+            <Envelope
+              config={x[1]}
+              onConfigChange={function (c: Partial<EnvelopeConfig>): void {
+                for (let k in c) {
+                  const v = (c as Record<string, any>)[k];
+                  engine.current?.sendEvent(
+                    new ParameterChangeEvent<any>(x[0], k, v)
+                  );
+                }
+              }}
+            />
+          </div>
+        ))}
+
         <div className="mb-4">
           <p>Current octave: {octave}</p>
           <p>White keys: A-S-D-F-G-H-J-K</p>

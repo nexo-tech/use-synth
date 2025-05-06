@@ -424,4 +424,10 @@ export class SynthEngine {
       (node): node is SynthOscillator => node instanceof SynthOscillator
     );
   }
+
+  getEnvelopes(): SynthADSR[] {
+    return Array.from(this.nodes.values()).filter(
+      (node): node is SynthADSR => node instanceof SynthADSR
+    );
+  }
 }

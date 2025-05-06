@@ -72,8 +72,12 @@ class NoteADSR {
 }
 
 export class SynthADSR implements SynthNode {
-  config: ADSRConfig;
+  private config: ADSRConfig;
   private noteADSRs: Map<number, NoteADSR> = new Map();
+
+  getConfig(): ADSRConfig {
+    return this.config;
+  }
 
   constructor(
     public readonly id: string,
