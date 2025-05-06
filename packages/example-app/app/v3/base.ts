@@ -1,6 +1,11 @@
+import { SynthEngine } from "./engine";
+
 export type NodeOutput = AudioNode | null | Map<number, AudioNode>;
 
-export function connectNodeOutputs(from: NodeOutput, to: NodeOutput) {
+export function connectNodeOutputs(fromNode: SynthNode, toNode: SynthNode) {
+  const from = fromNode.getNodeOutput();
+  const to = toNode.getNodeInput();
+
   // If either input is null, no connection is possible
   if (from === null || to === null) {
     return;
@@ -32,6 +37,8 @@ export function connectNodeOutputs(from: NodeOutput, to: NodeOutput) {
 
   // Case 4: Both are Maps
   if (from instanceof Map && to instanceof Map) {
+    toNode.prepareNotes(Array.from(from.keys()));
+
     // Connect each node from the source map to its corresponding node in the target map
     for (const [key, sourceNode] of from.entries()) {
       const targetNode = to.get(key);
@@ -51,10 +58,29 @@ export function disconnectNodeOutput(nodeOutput: NodeOutput) {
   }
 }
 
+export function getReleaseValue(engine: SynthEngine, id: string): number {
+  const items = engine.connections.getConnectionsTo(id);
+  const releaseValues = items
+    .map((item) => {
+      const node = engine.nodes.get(item.fromID);
+      if (node) {
+        return node.getReleaseValue();
+      }
+      return 0;
+    })
+    .reduce((a, b) => Math.max(a, b), 0);
+  return releaseValues;
+}
+
 export abstract class SynthNode {
   abstract get id(): string;
   abstract observe(event: SynthEvent): void;
-  abstract get(): NodeOutput;
+  abstract getNodeOutput(): NodeOutput;
+  getNodeInput(): NodeOutput {
+    return this.getNodeOutput();
+  }
+  abstract getReleaseValue(): number;
+  prepareNotes(notes: number[]) {}
 }
 
 export class Connection {

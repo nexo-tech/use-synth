@@ -42,6 +42,10 @@ class OscillatorNote {
     return this.note;
   }
 
+  get(): NodeOutput {
+    return this.getOutput();
+  }
+
   constructor(
     private engine: SynthEngine,
     private config: OscillatorConfig,
@@ -183,6 +187,16 @@ export class SynthOscillator extends SynthNode {
   private notes: Map<number, OscillatorNote> = new Map();
   private inputADSR: SynthADSR | null = null;
 
+  prepareNotes(notes: number[]): void {
+    notes.forEach((note) => {
+      this.getNote(note);
+    });
+  }
+
+  getReleaseValue(): number {
+    return this.inputADSR?.getReleaseValue() ?? 0;
+  }
+
   getConfig(): OscillatorConfig {
     return this.config;
   }
@@ -195,7 +209,7 @@ export class SynthOscillator extends SynthNode {
     super();
   }
 
-  get(): NodeOutput {
+  getNodeOutput(): NodeOutput {
     return new Map(
       Array.from(this.notes.values()).map((x) => [x.getNote(), x.getOutput()])
     );
@@ -203,12 +217,10 @@ export class SynthOscillator extends SynthNode {
 
   connectNoteToOutput(note: OscillatorNote) {
     const connections = this.engine.connections.getConnectionsFrom(this.id);
-    console.log("connections", connections, this.engine.connections);
     connections.forEach((connection) => {
       const node = this.engine.nodes.get(connection.toID);
       if (node) {
-        console.log("connecting", note.getOutput(), node.get());
-        connectNodeOutputs(note.getOutput(), node.get());
+        connectNodeOutputs(this, node);
       }
     });
   }
@@ -428,6 +440,7 @@ export class SynthOscillator extends SynthNode {
         const ev = event as NoteStartEvent;
         const note = this.getNote(ev.note);
         note.start();
+        this.connectNoteToOutput(note);
         break;
       }
       case "NoteStopEvent": {

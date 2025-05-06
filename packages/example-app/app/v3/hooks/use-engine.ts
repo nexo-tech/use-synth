@@ -33,13 +33,24 @@ export function useEngine() {
     );
 
     engine.current.sendEvent(
+      new NodeCreateEvent("fil1", "filter", {
+        type: "lowpass",
+        frequency: 1000,
+        q: 1,
+      })
+    );
+
+    engine.current.sendEvent(
       new ConnectionEvent(new Connection("adsr1", "osc1"))
     );
     engine.current.sendEvent(
-      new ConnectionEvent(new Connection("osc1", "output"))
+      new ConnectionEvent(new Connection("osc1", "fil1"))
     );
 
-    // Initialize audio context
+    engine.current.sendEvent(
+      new ConnectionEvent(new Connection("fil1", "output"))
+    );
+
     engine.current.ctx.resume();
     bumpUI((prev) => prev + 1);
   }, []);

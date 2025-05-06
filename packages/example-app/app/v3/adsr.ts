@@ -73,9 +73,18 @@ class NoteADSR {
   }
 }
 
-export class SynthADSR implements SynthNode {
+export class SynthADSR extends SynthNode {
   private config: ADSRConfig;
   private noteADSRs: Map<number, NoteADSR> = new Map();
+  prepareNotes(notes: number[]): void {
+    notes.forEach((note) => {
+      this.getNoteADSR(note);
+    });
+  }
+
+  getReleaseValue(): number {
+    return this.config.release;
+  }
 
   getConfig(): ADSRConfig {
     return this.config;
@@ -86,10 +95,11 @@ export class SynthADSR implements SynthNode {
     private engine: SynthEngine,
     config: ADSRConfig
   ) {
+    super();
     this.config = config;
   }
 
-  get(): NodeOutput {
+  getNodeOutput(): NodeOutput {
     // We don't return a single node since each note has its own ADSR
     return null;
   }

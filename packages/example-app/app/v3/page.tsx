@@ -2,6 +2,7 @@
 
 import { Envelope } from "../components/Envelope";
 import Osc from "../components/Osc";
+import Filter from "../components/Filter";
 import { EnvelopeConfig } from "../page";
 import { ParameterChangeEvent } from "./base";
 import { useEngine } from "./hooks/use-engine";
@@ -17,6 +18,9 @@ export default function OscillatorPage() {
   const envelopes = engine.current
     ?.getEnvelopes()
     .map((x) => [x.id, x.getConfig()] as const);
+  const filters = engine.current
+    ?.getFilters()
+    .map((x) => [x.id, x.getConfig()] as const);
 
   return (
     <main className="flex min-h-screen flex-col items-center p-8 bg-gray-950 text-white">
@@ -29,6 +33,22 @@ export default function OscillatorPage() {
                 for (let k in c) {
                   const v = (c as Record<string, any>)[k];
                   const ev = new ParameterChangeEvent<any>(x[0], k, v);
+                  engine.current?.sendEvent(ev);
+                }
+              }}
+            />
+          </div>
+        ))}
+
+        {filters?.map((x) => (
+          <div key={x[0]}>
+            <Filter
+              config={x[1]}
+              onConfigChange={(c) => {
+                for (let k in c) {
+                  const v = (c as Record<string, any>)[k];
+                  const ev = new ParameterChangeEvent<any>(x[0], k, v);
+                  console.log("sending event", ev);
                   engine.current?.sendEvent(ev);
                 }
               }}

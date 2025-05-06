@@ -5,6 +5,7 @@ import {
   connectNodeOutputs,
   DisconnectionEvent,
   disconnectNodeOutput,
+  getReleaseValue,
   NodeCreateEvent,
   NodeDeleteEvent,
   NodeOutput,
@@ -16,10 +17,16 @@ import {
 import { SynthOscillator } from "./oscillator";
 import { SynthFilter } from "./filter";
 
-class DestinationNode implements SynthNode {
-  constructor(private engine: SynthEngine) {}
+class DestinationNode extends SynthNode {
+  constructor(private engine: SynthEngine) {
+    super();
+  }
 
-  get(): NodeOutput {
+  getReleaseValue(): number {
+    return getReleaseValue(this.engine, this.id);
+  }
+
+  getNodeOutput(): NodeOutput {
     return this.engine.ctx.destination;
   }
 
@@ -32,14 +39,15 @@ class DestinationNode implements SynthNode {
       case "ConnectionEvent":
         if ((event as ConnectionEvent).connection.toID === this.id) {
           const ev = event as ConnectionEvent;
-          const fromNode = this.engine.nodes.get(ev.connection.fromID)!.get();
-
-          connectNodeOutputs(fromNode, this.get());
+          const fromNode = this.engine.nodes.get(ev.connection.fromID);
+          if (fromNode) {
+            connectNodeOutputs(fromNode, this);
+          }
         }
         break;
       case "DisconnectionEvent":
         if ((event as DisconnectionEvent).connection.toID === this.id) {
-          disconnectNodeOutput(this.get());
+          disconnectNodeOutput(this.getNodeOutput());
         }
         break;
     }
@@ -52,7 +60,6 @@ class Connections {
   private toFrom: Map<string, Map<string, Connection>> = new Map();
 
   addConnection(connection: Connection): boolean {
-    console.log("adding connection", connection);
     const { fromID, toID } = connection;
 
     // Initialize maps if they don't exist
@@ -65,7 +72,6 @@ class Connections {
 
     // Check if connection already exists
     if (this.fromTo.get(fromID)?.has(toID)) {
-      console.log("connection already exists", connection);
       return false;
     }
 
@@ -73,7 +79,6 @@ class Connections {
     this.fromTo.get(fromID)!.set(toID, connection);
     this.toFrom.get(toID)!.set(fromID, connection);
     this.connections.add(connection);
-    console.log("added connection", this.connections);
     return true;
   }
 

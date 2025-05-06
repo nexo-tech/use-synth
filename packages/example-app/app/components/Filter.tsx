@@ -1,6 +1,6 @@
 import React from "react";
 import { Knob } from "./Knob";
-import { FilterConfig } from "../page";
+import { FilterConfig } from "../v3/filter";
 
 interface FilterTypeSelectorProps {
   value: string;
@@ -86,12 +86,8 @@ export const Filter: React.FC<FilterProps> = ({ config, onConfigChange }) => {
     return Math.round(freq).toString();
   };
 
-  const handleQChange = (Q: number) => {
-    onConfigChange({ Q });
-  };
-
-  const handleGainChange = (gain: number) => {
-    onConfigChange({ gain });
+  const handleQChange = (q: number) => {
+    onConfigChange({ q });
   };
 
   return (
@@ -112,7 +108,7 @@ export const Filter: React.FC<FilterProps> = ({ config, onConfigChange }) => {
 
           <Knob
             label="Q"
-            value={config.Q ?? 1}
+            value={config.q ?? 1}
             min={0.1}
             max={20}
             step={0.1}
