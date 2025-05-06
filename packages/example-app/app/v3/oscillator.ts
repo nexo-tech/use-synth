@@ -104,7 +104,7 @@ class OscillatorNote {
   stop(immediate: boolean = false) {
     this.voices.forEach((voice) => {
       if (this.inputADSR && !immediate) {
-        const releaseTime = this.inputADSR.config.release * 1000;
+        const releaseTime = this.inputADSR.getConfig().release * 1000;
         setTimeout(() => {
           voice.osc.stop();
           voice.osc.disconnect();
