@@ -1,19 +1,22 @@
-import React from 'react';
-import { Knob } from './Knob';
-import { FilterConfig } from '../page';
+import React from "react";
+import { Knob } from "./Knob";
+import { FilterConfig } from "../page";
 
 interface FilterTypeSelectorProps {
   value: string;
   onChange: (value: string) => void;
 }
 
-const FilterTypeSelector: React.FC<FilterTypeSelectorProps> = ({ value, onChange }) => {
+const FilterTypeSelector: React.FC<FilterTypeSelectorProps> = ({
+  value,
+  onChange,
+}) => {
   const filterTypes = [
-    { id: 'lowpass', label: 'LPF' },
-    { id: 'highpass', label: 'HPF' },
-    { id: 'bandpass', label: 'BPF' },
-    { id: 'notch', label: 'Notch' },
-    { id: 'moogladder', label: 'Moog' }
+    { id: "lowpass", label: "LPF" },
+    { id: "highpass", label: "HPF" },
+    { id: "bandpass", label: "BPF" },
+    { id: "notch", label: "Notch" },
+    { id: "moogladder", label: "Moog" },
   ];
 
   return (
@@ -22,10 +25,11 @@ const FilterTypeSelector: React.FC<FilterTypeSelectorProps> = ({ value, onChange
         {filterTypes.map((type) => (
           <button
             key={type.id}
-            className={`px-1.5 py-0.5 rounded text-[10px] font-quantico transition-colors relative ${value === type.id
-              ? 'bg-blue-600 text-white'
-              : 'bg-gray-700 hover:bg-gray-600 text-gray-200'
-              }`}
+            className={`px-1.5 py-0.5 rounded text-[10px] font-quantico transition-colors relative ${
+              value === type.id
+                ? "bg-blue-600 text-white"
+                : "bg-gray-700 hover:bg-gray-600 text-gray-200"
+            }`}
             onClick={() => onChange(type.id)}
           >
             {type.label}
@@ -40,7 +44,7 @@ const FilterTypeSelector: React.FC<FilterTypeSelectorProps> = ({ value, onChange
 };
 
 interface FilterProps {
-  config: FilterConfig
+  config: FilterConfig;
   onConfigChange: (config: Partial<FilterConfig>) => void;
 }
 
@@ -94,7 +98,6 @@ export const Filter: React.FC<FilterProps> = ({ config, onConfigChange }) => {
     <div className="bg-gray-900 p-2 rounded-lg shadow-xl border border-gray-800">
       <div className="flex flex-col items-center">
         <FilterTypeSelector value={config.type} onChange={handleTypeChange} />
-
         <div className="flex justify-center gap-3 mt-2">
           <Knob
             label="Freq"
@@ -104,7 +107,7 @@ export const Filter: React.FC<FilterProps> = ({ config, onConfigChange }) => {
             step={0.001}
             size="sm"
             onChange={handleFrequencyChange}
-            formatLabel={(value) => formatFrequency(linearToLog(value)) + 'Hz'}
+            formatLabel={(value) => formatFrequency(linearToLog(value)) + "Hz"}
           />
 
           <Knob
@@ -116,20 +119,10 @@ export const Filter: React.FC<FilterProps> = ({ config, onConfigChange }) => {
             size="sm"
             onChange={handleQChange}
           />
-
-          <Knob
-            label="Gain"
-            value={config.gain ?? 0}
-            min={-40}
-            max={40}
-            step={0.1}
-            size="sm"
-            onChange={handleGainChange}
-          />
         </div>
       </div>
     </div>
   );
 };
 
-export default Filter; 
+export default Filter;
