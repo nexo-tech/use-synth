@@ -4,6 +4,8 @@ import {
   NoteStartEvent,
   NoteStopEvent,
   ConnectionEvent,
+  ParameterChangeEvent,
+  ParameterUpdatedEvent,
 } from "./base";
 import { SynthEngine } from "./engine";
 
@@ -103,6 +105,55 @@ export class SynthADSR implements SynthNode {
 
   observe(event: SynthEvent): void {
     switch (event.constructor.name) {
+      case "ParameterChangeEvent": {
+        const ev = event as ParameterChangeEvent<any>;
+        if (ev.id !== this.id) {
+          return;
+        }
+
+        if (ev.parameter === "attack") {
+          // Clamp attack between 0 and 10 seconds
+          const newAttack = Math.max(0, Math.min(10, ev.value));
+          const oldValue = this.config.attack;
+          this.config.attack = newAttack;
+
+          // Emit parameter updated event
+          this.engine.sendEvent(
+            new ParameterUpdatedEvent(this.id, "attack", newAttack, oldValue)
+          );
+        } else if (ev.parameter === "decay") {
+          // Clamp decay between 0 and 10 seconds
+          const newDecay = Math.max(0, Math.min(10, ev.value));
+          const oldValue = this.config.decay;
+          this.config.decay = newDecay;
+
+          // Emit parameter updated event
+          this.engine.sendEvent(
+            new ParameterUpdatedEvent(this.id, "decay", newDecay, oldValue)
+          );
+        } else if (ev.parameter === "sustain") {
+          // Clamp sustain between 0 and 1
+          const newSustain = Math.max(0, Math.min(1, ev.value));
+          const oldValue = this.config.sustain;
+          this.config.sustain = newSustain;
+
+          // Emit parameter updated event
+          this.engine.sendEvent(
+            new ParameterUpdatedEvent(this.id, "sustain", newSustain, oldValue)
+          );
+        } else if (ev.parameter === "release") {
+          // Clamp release between 0 and 10 seconds
+          const newRelease = Math.max(0, Math.min(10, ev.value));
+          const oldValue = this.config.release;
+          this.config.release = newRelease;
+
+          // Emit parameter updated event
+          this.engine.sendEvent(
+            new ParameterUpdatedEvent(this.id, "release", newRelease, oldValue)
+          );
+        }
+        break;
+      }
       case "NoteStartEvent": {
         console.log(event.constructor.name);
         const ev = event as NoteStartEvent;

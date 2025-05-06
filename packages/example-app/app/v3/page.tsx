@@ -28,9 +28,8 @@ export default function OscillatorPage() {
               onConfigChange={(c) => {
                 for (let k in c) {
                   const v = (c as Record<string, any>)[k];
-                  engine.current?.sendEvent(
-                    new ParameterChangeEvent<any>(x[0], k, v)
-                  );
+                  const ev = new ParameterChangeEvent<any>(x[0], k, v);
+                  engine.current?.sendEvent(ev);
                 }
               }}
             />
@@ -44,9 +43,9 @@ export default function OscillatorPage() {
               onConfigChange={function (c: Partial<EnvelopeConfig>): void {
                 for (let k in c) {
                   const v = (c as Record<string, any>)[k];
-                  engine.current?.sendEvent(
-                    new ParameterChangeEvent<any>(x[0], k, v)
-                  );
+                  const ev = new ParameterChangeEvent<any>(x[0], k, v);
+                  console.log("sending", ev);
+                  engine.current?.sendEvent(ev);
                 }
               }}
             />
