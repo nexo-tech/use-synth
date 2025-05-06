@@ -1,7 +1,60 @@
+export type NodeOutput = AudioNode | null | Map<number, AudioNode>;
+
+export function connectNodeOutputs(from: NodeOutput, to: NodeOutput) {
+  // If either input is null, no connection is possible
+  if (from === null || to === null) {
+    return;
+  }
+
+  // Case 1: Both are AudioNodes
+  if (from instanceof AudioNode && to instanceof AudioNode) {
+    from.connect(to);
+    return;
+  }
+
+  // Case 2: From is AudioNode, To is Map
+  if (from instanceof AudioNode && to instanceof Map) {
+    // Connect the single node to all nodes in the map
+    for (const node of to.values()) {
+      from.connect(node);
+    }
+    return;
+  }
+
+  // Case 3: From is Map, To is AudioNode
+  if (from instanceof Map && to instanceof AudioNode) {
+    // Connect all nodes in the map to the single node
+    for (const node of from.values()) {
+      node.connect(to);
+    }
+    return;
+  }
+
+  // Case 4: Both are Maps
+  if (from instanceof Map && to instanceof Map) {
+    // Connect each node from the source map to its corresponding node in the target map
+    for (const [key, sourceNode] of from.entries()) {
+      const targetNode = to.get(key);
+      if (targetNode) {
+        sourceNode.connect(targetNode);
+      }
+    }
+    return;
+  }
+}
+
+export function disconnectNodeOutput(nodeOutput: NodeOutput) {
+  if (nodeOutput instanceof AudioNode) {
+    nodeOutput.disconnect();
+  } else if (nodeOutput instanceof Map) {
+    nodeOutput.forEach((output) => disconnectNodeOutput(output));
+  }
+}
+
 export abstract class SynthNode {
   abstract get id(): string;
   abstract observe(event: SynthEvent): void;
-  abstract get(): AudioNode | null;
+  abstract get(): NodeOutput;
 }
 
 export class Connection {

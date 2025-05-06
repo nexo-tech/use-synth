@@ -6,6 +6,7 @@ import {
   ConnectionEvent,
   ParameterChangeEvent,
   ParameterUpdatedEvent,
+  NodeOutput,
 } from "./base";
 import { SynthEngine } from "./engine";
 
@@ -88,7 +89,7 @@ export class SynthADSR implements SynthNode {
     this.config = config;
   }
 
-  get(): AudioNode | null {
+  get(): NodeOutput {
     // We don't return a single node since each note has its own ADSR
     return null;
   }

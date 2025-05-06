@@ -8,6 +8,8 @@ import {
   SynthNode,
   ParameterChangeEvent,
   ParameterUpdatedEvent,
+  NodeOutput,
+  connectNodeOutputs,
 } from "./base";
 import { SynthADSR } from "./adsr";
 
@@ -35,6 +37,10 @@ class OscillatorNote {
   private voices: OscillatorVoice[] = [];
   private levelGain: GainNode;
   private adsrGain: GainNode;
+
+  getNote(): number {
+    return this.note;
+  }
 
   constructor(
     private engine: SynthEngine,
@@ -174,7 +180,6 @@ class OscillatorNote {
 }
 
 export class SynthOscillator extends SynthNode {
-  private masterGain: GainNode;
   private notes: Map<number, OscillatorNote> = new Map();
   private inputADSR: SynthADSR | null = null;
 
@@ -188,11 +193,30 @@ export class SynthOscillator extends SynthNode {
     private config: OscillatorConfig
   ) {
     super();
-    this.masterGain = engine.ctx.createGain();
   }
 
-  get(): AudioNode | null {
-    return this.masterGain;
+  get(): NodeOutput {
+    return new Map(
+      Array.from(this.notes.values()).map((x) => [x.getNote(), x.getOutput()])
+    );
+  }
+
+  connectNoteToOutput(note: OscillatorNote) {
+    const connections = this.engine.connections.getConnectionsFrom(this.id);
+    console.log("connections", connections, this.engine.connections);
+    connections.forEach((connection) => {
+      const node = this.engine.nodes.get(connection.toID);
+      if (node) {
+        console.log("connecting", note.getOutput(), node.get());
+        connectNodeOutputs(note.getOutput(), node.get());
+      }
+    });
+  }
+
+  connectAllNotesToOutput() {
+    this.notes.forEach((note) => {
+      this.connectNoteToOutput(note);
+    });
   }
 
   private getNote(note: number): OscillatorNote {
@@ -205,7 +229,7 @@ export class SynthOscillator extends SynthNode {
         this.inputADSR
       );
       this.notes.set(note, oscNote);
-      oscNote.getOutput().connect(this.masterGain);
+      this.connectNoteToOutput(oscNote);
     }
     return oscNote;
   }
@@ -275,7 +299,7 @@ export class SynthOscillator extends SynthNode {
               this.inputADSR
             );
             this.notes.set(noteNumber, newNote);
-            newNote.getOutput().connect(this.masterGain);
+            this.connectNoteToOutput(newNote);
             if (this.notes.has(noteNumber)) {
               newNote.start();
             }
@@ -348,6 +372,9 @@ export class SynthOscillator extends SynthNode {
       }
       case "ConnectionEvent": {
         const ev = event as ConnectionEvent;
+        if (ev.connection.toID !== this.id) {
+          return;
+        }
         const upstream = this.engine.nodes.get(ev.connection.fromID);
         if (upstream instanceof SynthADSR) {
           this.inputADSR = upstream;
@@ -361,7 +388,7 @@ export class SynthOscillator extends SynthNode {
               this.inputADSR
             );
             this.notes.set(noteNumber, newNote);
-            newNote.getOutput().connect(this.masterGain);
+            this.connectNoteToOutput(newNote);
             if (this.notes.has(noteNumber)) {
               newNote.start();
             }
@@ -388,7 +415,8 @@ export class SynthOscillator extends SynthNode {
               null
             );
             this.notes.set(noteNumber, newNote);
-            newNote.getOutput().connect(this.masterGain);
+            this.connectNoteToOutput(newNote);
+
             if (this.notes.has(noteNumber)) {
               newNote.start();
             }

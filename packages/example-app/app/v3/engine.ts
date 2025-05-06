@@ -2,20 +2,24 @@ import { SynthADSR } from "./adsr";
 import {
   Connection,
   ConnectionEvent,
+  connectNodeOutputs,
   DisconnectionEvent,
+  disconnectNodeOutput,
   NodeCreateEvent,
   NodeDeleteEvent,
+  NodeOutput,
   NoteStartEvent,
   NoteStopEvent,
   SynthEvent,
   SynthNode,
 } from "./base";
 import { SynthOscillator } from "./oscillator";
+import { SynthFilter } from "./filter";
 
 class DestinationNode implements SynthNode {
   constructor(private engine: SynthEngine) {}
 
-  get(): AudioNode | null {
+  get(): NodeOutput {
     return this.engine.ctx.destination;
   }
 
@@ -28,15 +32,14 @@ class DestinationNode implements SynthNode {
       case "ConnectionEvent":
         if ((event as ConnectionEvent).connection.toID === this.id) {
           const ev = event as ConnectionEvent;
-          this.engine.nodes
-            .get(ev.connection.fromID)!
-            .get()
-            ?.connect(this.get()!);
+          const fromNode = this.engine.nodes.get(ev.connection.fromID)!.get();
+
+          connectNodeOutputs(fromNode, this.get());
         }
         break;
       case "DisconnectionEvent":
         if ((event as DisconnectionEvent).connection.toID === this.id) {
-          this.get()?.disconnect();
+          disconnectNodeOutput(this.get());
         }
         break;
     }
@@ -49,6 +52,7 @@ class Connections {
   private toFrom: Map<string, Map<string, Connection>> = new Map();
 
   addConnection(connection: Connection): boolean {
+    console.log("adding connection", connection);
     const { fromID, toID } = connection;
 
     // Initialize maps if they don't exist
@@ -61,6 +65,7 @@ class Connections {
 
     // Check if connection already exists
     if (this.fromTo.get(fromID)?.has(toID)) {
+      console.log("connection already exists", connection);
       return false;
     }
 
@@ -68,6 +73,7 @@ class Connections {
     this.fromTo.get(fromID)!.set(toID, connection);
     this.toFrom.get(toID)!.set(fromID, connection);
     this.connections.add(connection);
+    console.log("added connection", this.connections);
     return true;
   }
 
@@ -379,6 +385,10 @@ export class SynthEngine {
             const adsr = new SynthADSR(id, this, ev.config);
             this.nodes.set(adsr.id, adsr);
             break;
+          case "filter":
+            const filter = new SynthFilter(id, this, ev.config);
+            this.nodes.set(filter.id, filter);
+            break;
         }
         break;
       }
@@ -428,6 +438,12 @@ export class SynthEngine {
   getEnvelopes(): SynthADSR[] {
     return Array.from(this.nodes.values()).filter(
       (node): node is SynthADSR => node instanceof SynthADSR
+    );
+  }
+
+  getFilters(): SynthFilter[] {
+    return Array.from(this.nodes.values()).filter(
+      (node): node is SynthFilter => node instanceof SynthFilter
     );
   }
 }
