@@ -40,7 +40,6 @@ class NoteADSR {
   noteOn() {
     if (this.isPlaying) return;
     this.isPlaying = true;
-    console.log("noteOn", this.gainNode);
     this.cv.start();
 
     const now = this.engine.ctx.currentTime;
@@ -155,14 +154,12 @@ export class SynthADSR implements SynthNode {
         break;
       }
       case "NoteStartEvent": {
-        console.log(event.constructor.name);
         const ev = event as NoteStartEvent;
         const adsr = this.getNoteADSR(ev.note);
         adsr.noteOn();
         break;
       }
       case "NoteStopEvent": {
-        console.log(event.constructor.name);
         const ev = event as NoteStopEvent;
         const adsr = this.noteADSRs.get(ev.note);
         if (adsr) {

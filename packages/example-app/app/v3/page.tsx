@@ -44,7 +44,6 @@ export default function OscillatorPage() {
                 for (let k in c) {
                   const v = (c as Record<string, any>)[k];
                   const ev = new ParameterChangeEvent<any>(x[0], k, v);
-                  console.log("sending", ev);
                   engine.current?.sendEvent(ev);
                 }
               }}
