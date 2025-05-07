@@ -1,6 +1,12 @@
 import { SynthEngine } from "./engine";
 
 export type NodeOutput = AudioNode | null | Map<number, AudioNode>;
+export interface Modulation {
+  fromID: string;
+  toID: string;
+  parameter: string;
+  amount: number; // -1 to 1
+}
 
 export const availableModulationTargets = [
   {

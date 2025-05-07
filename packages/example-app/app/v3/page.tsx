@@ -4,8 +4,14 @@ import { Envelope } from "../components/Envelope";
 import Osc from "../components/Osc";
 import Filter from "../components/Filter";
 import LFO from "../components/LFO";
+import ModulationMatrix from "../components/ModulationMatrix";
 import { EnvelopeConfig } from "../page";
-import { availableModulationTargets, ParameterChangeEvent } from "./base";
+import {
+  availableModulationTargets,
+  ParameterChangeEvent,
+  NodeCreateEvent,
+  NodeDeleteEvent,
+} from "./base";
 import { useEngine } from "./hooks/use-engine";
 import { useKeyboardNotes } from "./hooks/use-keyboard-notes";
 import Oscilloscope from "../components/Oscilloscope";
@@ -27,39 +33,15 @@ export default function OscillatorPage() {
   const lfos = engine.current
     ?.getLFOs()
     .map((x) => [x.id, x.getConfig()] as const);
-  const lfo = (() => {
-    try {
-      // @ts-ignore
-      if (window.modg) {
-        // @ts-ignore
-        return window.modg;
-      }
-      const x = engine.current?.getLFOs()?.[0]?.getNodeOutput();
-      console.log({ x });
-      if (x instanceof Map) {
-        return Array.from(x.values())[0];
-      } else if (x instanceof AudioNode) {
-        return x;
-      }
-      return null;
-    } catch {
-      return null;
-    }
-  })();
 
   const [lastTouchedModulateableParam, setLastTouchedModulateableParam] =
     useState<{
       id: string;
       parameter: string;
-      value: number;
     } | null>(null);
+
   const setLastTouchedModulateableParamChecked = useCallback(
-    (param: {
-      componentType: string;
-      id: string;
-      parameter: string;
-      value: number;
-    }) => {
+    (param: { componentType: string; id: string; parameter: string }) => {
       for (const target of availableModulationTargets) {
         if (
           target.componentType === param.componentType &&
@@ -72,6 +54,60 @@ export default function OscillatorPage() {
     },
     []
   );
+
+  const handleCreateLFO = useCallback(() => {
+    if (!engine.current) return;
+    const id = `lfo${engine.current.getLFOs().length + 1}`;
+    engine.current.sendEvent(
+      new NodeCreateEvent(id, "lfo", {
+        type: "sine",
+        rate: 5,
+        sync: false,
+        shape: 0.5,
+        phase: 0,
+      })
+    );
+  }, [engine]);
+
+  const handleCreateModEnv = useCallback(() => {
+    if (!engine.current) return;
+    const id = `env${engine.current.getEnvelopes().length + 1}`;
+    engine.current.sendEvent(
+      new NodeCreateEvent(id, "adsr", {
+        attack: 0.1,
+        decay: 0.1,
+        sustain: 0.5,
+        release: 0.1,
+      })
+    );
+  }, [engine]);
+
+  const handleRemoveSource = useCallback(
+    (sourceId: string) => {
+      if (!engine.current) return;
+      engine.current.sendEvent(new NodeDeleteEvent(sourceId));
+    },
+    [engine]
+  );
+
+  const handleSourceClick = useCallback((sourceId: string) => {
+    // You can implement source selection/editing here if needed
+    console.log("Source clicked:", sourceId);
+  }, []);
+
+  // Create modulation sources from LFOs and envelopes
+  const modulationSources = [
+    ...(lfos?.map(([id, config]) => ({
+      id,
+      type: "lfo" as const,
+      name: `LFO ${id}`,
+    })) ?? []),
+    ...(envelopes?.map(([id, config]) => ({
+      id,
+      type: "env" as const,
+      name: `ENV ${id}`,
+    })) ?? []),
+  ];
 
   return (
     <main className="flex min-h-screen flex-col items-center p-8 bg-gray-950 text-white">
@@ -89,7 +125,6 @@ export default function OscillatorPage() {
                     componentType: "osc",
                     id: x[0],
                     parameter: k,
-                    value: v,
                   });
                 }
               }}
@@ -104,8 +139,12 @@ export default function OscillatorPage() {
                 for (let k in c) {
                   const v = (c as Record<string, any>)[k];
                   const ev = new ParameterChangeEvent<any>(x[0], k, v);
-                  console.log("sending event", ev);
                   engine.current?.sendEvent(ev);
+                  setLastTouchedModulateableParamChecked({
+                    componentType: "filter",
+                    id: x[0],
+                    parameter: k,
+                  });
                 }
               }}
             />
@@ -139,7 +178,17 @@ export default function OscillatorPage() {
             />
           </div>
         ))}
-        {lfo && <Oscilloscope audioNode={lfo} width={400} height={200} />}
+
+        {engine.current && (
+          <ModulationMatrix
+            activeModulations={engine.current.modulations.getAllModulations()}
+            modulationSources={modulationSources}
+            lastTouchedParam={lastTouchedModulateableParam}
+            onModulationChange={(ev) => {
+              engine.current?.sendEvent(ev);
+            }}
+          />
+        )}
 
         <div className="mb-4">
           <p>Current octave: {octave}</p>

@@ -6,6 +6,7 @@ import {
   DisconnectionEvent,
   disconnectNodeOutput,
   getReleaseValue,
+  Modulation,
   ModulationEvent,
   NodeCreateEvent,
   NodeDeleteEvent,
@@ -108,13 +109,6 @@ class Connections {
   getAllConnections(): Connection[] {
     return Array.from(this.connections);
   }
-}
-
-interface Modulation {
-  fromID: string;
-  toID: string;
-  parameter: string;
-  amount: number; // -1 to 1
 }
 
 class Modulations {
