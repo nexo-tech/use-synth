@@ -2,6 +2,14 @@ import { SynthEngine } from "./engine";
 
 export type NodeOutput = AudioNode | null | Map<number, AudioNode>;
 
+export const availableModulationTargets = [
+  {
+    componentType: "osc",
+    parameter: "level",
+    name: "Level",
+  },
+];
+
 export function connectNodeOutputs(fromNode: SynthNode, toNode: SynthNode) {
   const from = fromNode.getNodeOutput();
   const to = toNode.getNodeInput();

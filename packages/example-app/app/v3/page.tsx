@@ -5,11 +5,11 @@ import Osc from "../components/Osc";
 import Filter from "../components/Filter";
 import LFO from "../components/LFO";
 import { EnvelopeConfig } from "../page";
-import { ParameterChangeEvent } from "./base";
+import { availableModulationTargets, ParameterChangeEvent } from "./base";
 import { useEngine } from "./hooks/use-engine";
 import { useKeyboardNotes } from "./hooks/use-keyboard-notes";
 import Oscilloscope from "../components/Oscilloscope";
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
 export default function OscillatorPage() {
   const engine = useEngine();
@@ -46,6 +46,33 @@ export default function OscillatorPage() {
       return null;
     }
   })();
+
+  const [lastTouchedModulateableParam, setLastTouchedModulateableParam] =
+    useState<{
+      id: string;
+      parameter: string;
+      value: number;
+    } | null>(null);
+  const setLastTouchedModulateableParamChecked = useCallback(
+    (param: {
+      componentType: string;
+      id: string;
+      parameter: string;
+      value: number;
+    }) => {
+      for (const target of availableModulationTargets) {
+        if (
+          target.componentType === param.componentType &&
+          target.parameter === param.parameter
+        ) {
+          setLastTouchedModulateableParam(param);
+          return;
+        }
+      }
+    },
+    []
+  );
+
   return (
     <main className="flex min-h-screen flex-col items-center p-8 bg-gray-950 text-white">
       <div className="flex flex-col gap-2">
@@ -58,12 +85,17 @@ export default function OscillatorPage() {
                   const v = (c as Record<string, any>)[k];
                   const ev = new ParameterChangeEvent<any>(x[0], k, v);
                   engine.current?.sendEvent(ev);
+                  setLastTouchedModulateableParamChecked({
+                    componentType: "osc",
+                    id: x[0],
+                    parameter: k,
+                    value: v,
+                  });
                 }
               }}
             />
           </div>
         ))}
-
         {filters?.map((x) => (
           <div key={x[0]}>
             <Filter
@@ -79,7 +111,6 @@ export default function OscillatorPage() {
             />
           </div>
         ))}
-
         {envelopes?.map((x) => (
           <div key={x[0]}>
             <Envelope
@@ -94,7 +125,6 @@ export default function OscillatorPage() {
             />
           </div>
         ))}
-
         {lfos?.map((x) => (
           <div key={x[0]}>
             <LFO
