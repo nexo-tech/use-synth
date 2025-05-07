@@ -40,6 +40,16 @@ export function useEngine() {
       })
     );
 
+    // Create a second ADSR for filter modulation
+    engine.current.sendEvent(
+      new NodeCreateEvent("adsr2", "adsr", {
+        attack: 0.2,
+        decay: 0.3,
+        sustain: 0.2,
+        release: 0.4,
+      })
+    );
+
     engine.current.sendEvent(
       new NodeCreateEvent("fil1", "filter", {
         type: "lowpass",
@@ -60,6 +70,10 @@ export function useEngine() {
     );
 
     engine.current.sendEvent(new ModulationEvent("lfo1", "osc1", "pitch", 1));
+    // Connect ADSR2 to modulate filter frequency
+    engine.current.sendEvent(
+      new ModulationEvent("adsr2", "fil1", "frequency", 1)
+    );
 
     engine.current.sendEvent(
       new ConnectionEvent(new Connection("adsr1", "osc1"))

@@ -11,7 +11,10 @@ import {
   NodeOutput,
   connectNodeOutputs,
   getReleaseValue,
+  ModulationEvent,
 } from "./base";
+import { ModulationSignal } from "./modulation-signal";
+import { SynthLFO } from "./lfo";
 
 export interface FilterConfig {
   type: BiquadFilterType;
@@ -22,6 +25,8 @@ export interface FilterConfig {
 class FilterVoice {
   private filter: BiquadFilterNode;
   private gain: GainNode;
+  private frequencyModulationGainInput: ModulationSignal;
+  private qModulationGainInput: ModulationSignal;
 
   constructor(
     private engine: SynthEngine,
@@ -30,6 +35,12 @@ class FilterVoice {
   ) {
     this.filter = engine.ctx.createBiquadFilter();
     this.gain = engine.ctx.createGain();
+    this.frequencyModulationGainInput = new ModulationSignal(
+      engine,
+      this.note,
+      12000
+    );
+    this.qModulationGainInput = new ModulationSignal(engine, this.note);
     this.filter.connect(this.gain);
     this.updateFilter();
   }
@@ -64,9 +75,37 @@ class FilterVoice {
     this.filter.Q.value = q;
   }
 
+  connectModulation(
+    parameter: "frequency" | "q",
+    modulationSource: SynthNode,
+    amount: number
+  ) {
+    switch (parameter) {
+      case "frequency":
+        this.frequencyModulationGainInput.setAmount(modulationSource, amount);
+        console.log(this.filter.frequency);
+        this.frequencyModulationGainInput
+          .getOutput()
+          .connect(this.filter.frequency);
+        break;
+      case "q":
+        this.qModulationGainInput.setAmount(modulationSource, amount);
+        this.qModulationGainInput.getOutput().connect(this.filter.Q);
+        break;
+      default:
+        throw new Error(`Unsupported parameter: ${parameter}`);
+    }
+  }
+
+  disconnectModulation() {
+    this.frequencyModulationGainInput.disconnect();
+    this.qModulationGainInput.disconnect();
+  }
+
   disconnect() {
     this.filter.disconnect();
     this.gain.disconnect();
+    this.disconnectModulation();
   }
 }
 
@@ -125,6 +164,18 @@ export class SynthFilter extends SynthNode {
         connectNodeOutputs(this, node);
       }
     });
+  }
+
+  get modulationSources(): {
+    parameter: "frequency" | "q";
+    source: SynthNode;
+    amount: number;
+  }[] {
+    return this.engine.modulations.getModulationsTo(this.id).map((mod) => ({
+      parameter: mod.parameter as "frequency" | "q",
+      source: this.engine.nodes.get(mod.fromID) as SynthNode,
+      amount: mod.amount,
+    }));
   }
 
   observe(event: SynthEvent): void {
@@ -204,10 +255,34 @@ export class SynthFilter extends SynthNode {
         }
         break;
       }
+      case "ModulationEvent": {
+        const ev = event as ModulationEvent;
+        if (ev.toID !== this.id) return;
+
+        const modulationSource = this.engine.nodes.get(ev.fromID);
+        if (!modulationSource || !(modulationSource instanceof SynthLFO))
+          return;
+
+        // Apply modulation to all active voices
+        this.voices.forEach((voice, noteNumber) => {
+          voice.connectModulation(
+            ev.parameter as "frequency" | "q",
+            modulationSource,
+            ev.amount
+          );
+        });
+        break;
+      }
       case "NoteStartEvent": {
         const ev = event as NoteStartEvent;
-        this.getVoice(ev.note);
+        const voice = this.getVoice(ev.note);
         this.reconnect();
+
+        // Connect any active modulations to the new voice
+        this.modulationSources.forEach(({ parameter, source, amount }) => {
+          source.prepareNotes([ev.note]);
+          voice.connectModulation(parameter, source, amount);
+        });
         break;
       }
       case "NoteStopEvent": {
