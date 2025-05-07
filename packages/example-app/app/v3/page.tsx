@@ -3,6 +3,7 @@
 import { Envelope } from "../components/Envelope";
 import Osc from "../components/Osc";
 import Filter from "../components/Filter";
+import LFO from "../components/LFO";
 import { EnvelopeConfig } from "../page";
 import { ParameterChangeEvent } from "./base";
 import { useEngine } from "./hooks/use-engine";
@@ -20,6 +21,9 @@ export default function OscillatorPage() {
     .map((x) => [x.id, x.getConfig()] as const);
   const filters = engine.current
     ?.getFilters()
+    .map((x) => [x.id, x.getConfig()] as const);
+  const lfos = engine.current
+    ?.getLFOs()
     .map((x) => [x.id, x.getConfig()] as const);
 
   return (
@@ -61,6 +65,21 @@ export default function OscillatorPage() {
             <Envelope
               config={x[1]}
               onConfigChange={function (c: Partial<EnvelopeConfig>): void {
+                for (let k in c) {
+                  const v = (c as Record<string, any>)[k];
+                  const ev = new ParameterChangeEvent<any>(x[0], k, v);
+                  engine.current?.sendEvent(ev);
+                }
+              }}
+            />
+          </div>
+        ))}
+
+        {lfos?.map((x) => (
+          <div key={x[0]}>
+            <LFO
+              config={x[1]}
+              onConfigChange={(c) => {
                 for (let k in c) {
                   const v = (c as Record<string, any>)[k];
                   const ev = new ParameterChangeEvent<any>(x[0], k, v);

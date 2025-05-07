@@ -16,6 +16,7 @@ import {
 } from "./base";
 import { SynthOscillator } from "./oscillator";
 import { SynthFilter } from "./filter";
+import { SynthLFO } from "./lfo";
 
 class DestinationNode extends SynthNode {
   constructor(private engine: SynthEngine) {
@@ -394,6 +395,10 @@ export class SynthEngine {
             const filter = new SynthFilter(id, this, ev.config);
             this.nodes.set(filter.id, filter);
             break;
+          case "lfo":
+            const lfo = new SynthLFO(id, this, ev.config);
+            this.nodes.set(lfo.id, lfo);
+            break;
         }
         break;
       }
@@ -449,6 +454,12 @@ export class SynthEngine {
   getFilters(): SynthFilter[] {
     return Array.from(this.nodes.values()).filter(
       (node): node is SynthFilter => node instanceof SynthFilter
+    );
+  }
+
+  getLFOs(): SynthLFO[] {
+    return Array.from(this.nodes.values()).filter(
+      (node): node is SynthLFO => node instanceof SynthLFO
     );
   }
 }

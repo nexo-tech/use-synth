@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { SynthEngine } from "../engine";
+import { ModulationEvent, SynthEngine } from "../engine";
 import { Connection, ConnectionEvent, NodeCreateEvent } from "../base";
 
 export function useEngine() {
@@ -39,6 +39,19 @@ export function useEngine() {
         q: 1,
       })
     );
+    // Create a lfo
+    engine.current.sendEvent(
+      new NodeCreateEvent("lfo1", "lfo", {
+        type: "sine",
+        rate: 1,
+        shape: 0.5,
+        phase: 0,
+        delay: 0,
+        fade: 0,
+      })
+    );
+
+    engine.current.sendEvent(new ModulationEvent("lfo1", "osc1", "level", 0.5));
 
     engine.current.sendEvent(
       new ConnectionEvent(new Connection("adsr1", "osc1"))
