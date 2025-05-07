@@ -178,7 +178,6 @@ class Modulations {
   }
 
   removeModulation(modulation: Modulation): boolean {
-    console.log("[Modulations] Removing modulation", modulation);
     const { fromID, toID, parameter } = modulation;
 
     // Remove modulation from both maps

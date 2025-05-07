@@ -38,6 +38,10 @@ class NoteADSR {
     return this.cv;
   }
 
+  getNote(): number {
+    return this.note;
+  }
+
   noteOn() {
     if (this.isPlaying) return;
     this.isPlaying = true;
@@ -101,7 +105,9 @@ export class SynthADSR extends SynthNode {
 
   getNodeOutput(): NodeOutput {
     // We don't return a single node since each note has its own ADSR
-    return null;
+    return new Map(
+      Array.from(this.noteADSRs.values()).map((x) => [x.getNote(), x.get()])
+    );
   }
 
   getNoteADSR(note: number): NoteADSR {

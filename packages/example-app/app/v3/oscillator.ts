@@ -14,6 +14,7 @@ import {
 } from "./base";
 import { SynthADSR } from "./adsr";
 import { SynthLFO } from "./lfo";
+import { ModulationSignal } from "./modulation-signal";
 
 export interface OscillatorConfig {
   type: "sine" | "square" | "sawtooth" | "triangle";
@@ -40,8 +41,8 @@ class OscillatorNote {
   private levelGain: GainNode;
   private levelModulatedGain: GainNode;
   private adsrGain: GainNode;
-  private levelModulationGainInput: GainNode;
-  private pitchModulationGainInput: GainNode;
+  private levelModulationGainInput: ModulationSignal;
+  private pitchModulationGainInput: ModulationSignal;
 
   getNote(): number {
     return this.note;
@@ -60,13 +61,17 @@ class OscillatorNote {
     this.levelGain = engine.ctx.createGain();
     this.levelModulatedGain = engine.ctx.createGain();
     this.adsrGain = engine.ctx.createGain();
-    this.levelModulationGainInput = engine.ctx.createGain();
-    this.pitchModulationGainInput = engine.ctx.createGain();
+    this.levelModulationGainInput = new ModulationSignal(engine, this.note);
+    this.pitchModulationGainInput = new ModulationSignal(
+      engine,
+      this.note,
+      2850
+    );
 
     // Set initial values
     this.levelGain.gain.value = this.config.level ?? 1.0;
-    this.levelModulationGainInput.gain.value = 0;
-    this.pitchModulationGainInput.gain.value = 0;
+    // this.levelModulationGainInput.gain.value = 0;
+    // this.pitchModulationGainInput.gain.value = 0;
     this.levelModulatedGain.gain.value = 1;
     this.levelModulatedGain.connect(this.levelGain);
 
@@ -210,20 +215,17 @@ class OscillatorNote {
 
   connectModulation(
     parameter: "level" | "pitch" | "detune",
-    modulationSource: AudioNode,
+    modulationSource: SynthNode,
     amount: number
   ) {
     switch (parameter) {
       case "level":
-        modulationSource.connect(this.levelModulationGainInput);
-        this.levelModulationGainInput.gain.value = amount;
-        this.levelModulationGainInput.connect(this.levelModulatedGain.gain);
+        this.levelModulationGainInput.setAmount(modulationSource, amount);
         break;
       case "pitch":
-        modulationSource.connect(this.pitchModulationGainInput);
-        this.pitchModulationGainInput.gain.value = amount * 2850; // cents
+        this.pitchModulationGainInput.setAmount(modulationSource, amount); // cents
         this.voices.forEach((voice) => {
-          this.pitchModulationGainInput.connect(voice.osc.detune);
+          this.pitchModulationGainInput.getOutput().connect(voice.osc.detune);
         });
         break;
       default:
@@ -508,20 +510,14 @@ export class SynthOscillator extends SynthNode {
         const modulationSource = this.engine.nodes.get(ev.fromID);
         if (!(modulationSource instanceof SynthLFO)) return;
         // Get the LFO output for this note
-        const modulationNodeOutput = modulationSource.getNodeOutput();
-        if (modulationNodeOutput instanceof Map) {
-          // Apply modulation to all active notes
-          this.notes.forEach((note, noteNumber) => {
-            const modulationSignal = modulationNodeOutput.get(noteNumber);
-            if (modulationSignal) {
-              note.connectModulation(
-                ev.parameter as "level" | "pitch" | "detune",
-                modulationSignal,
-                ev.amount
-              );
-            }
-          });
-        }
+        // Apply modulation to all active notes
+        this.notes.forEach((note, noteNumber) => {
+          note.connectModulation(
+            ev.parameter as "level" | "pitch" | "detune",
+            modulationSource,
+            ev.amount
+          );
+        });
         break;
       }
       case "NoteStartEvent": {
@@ -533,15 +529,8 @@ export class SynthOscillator extends SynthNode {
         // Connect any active modulations to the new note
         this.modulationSources.forEach(
           ({ parameter, source, amount }, lfoId) => {
-            console.log(parameter, source, amount);
             source.prepareNotes([ev.note]);
-            const nodeOutput = source.getNodeOutput();
-            if (nodeOutput instanceof Map) {
-              const nodeSignal = nodeOutput.get(ev.note);
-              if (nodeSignal) {
-                note.connectModulation(parameter, nodeSignal, amount);
-              }
-            }
+            note.connectModulation(parameter, source, amount);
           }
         );
         break;
