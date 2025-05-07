@@ -191,3 +191,13 @@ export class ModulationEvent implements SynthEvent {
     public readonly amount: number
   ) {}
 }
+
+export class ModulationUpdatedEvent implements SynthEvent {
+  constructor(
+    public readonly fromID: string,
+    public readonly toID: string,
+    public readonly parameter: string,
+    public readonly amount: number,
+    public readonly oldAmount: number
+  ) {}
+}

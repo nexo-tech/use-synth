@@ -8,6 +8,7 @@ import {
   getReleaseValue,
   Modulation,
   ModulationEvent,
+  ModulationUpdatedEvent,
   NodeCreateEvent,
   NodeDeleteEvent,
   NodeOutput,
@@ -115,6 +116,8 @@ class Modulations {
   private modulations: Set<Modulation> = new Set();
   private fromTo: Map<string, Map<string, Set<Modulation>>> = new Map();
   private toFrom: Map<string, Map<string, Set<Modulation>>> = new Map();
+
+  constructor(private engine: SynthEngine) {}
 
   addModulation(modulation: Modulation): boolean {
     const { fromID, toID, parameter, amount } = modulation;
@@ -248,7 +251,14 @@ class Modulations {
     if (amount === 0) {
       const existingModulation = this.findModulation(fromID, toID, parameter);
       if (existingModulation) {
-        return this.removeModulation(existingModulation);
+        const oldAmount = existingModulation.amount;
+        const result = this.removeModulation(existingModulation);
+        if (result) {
+          this.engine.sendEvent(
+            new ModulationUpdatedEvent(fromID, toID, parameter, 0, oldAmount)
+          );
+        }
+        return result;
       }
       return false;
     }
@@ -257,13 +267,23 @@ class Modulations {
     const existingModulation = this.findModulation(fromID, toID, parameter);
     if (existingModulation) {
       // Update existing modulation
+      const oldAmount = existingModulation.amount;
       existingModulation.amount = amount;
+      this.engine.sendEvent(
+        new ModulationUpdatedEvent(fromID, toID, parameter, amount, oldAmount)
+      );
       return true;
     }
 
     // Create new modulation
     const modulation: Modulation = { fromID, toID, parameter, amount };
-    return this.addModulation(modulation);
+    const result = this.addModulation(modulation);
+    if (result) {
+      this.engine.sendEvent(
+        new ModulationUpdatedEvent(fromID, toID, parameter, amount, 0)
+      );
+    }
+    return result;
   }
 
   private findModulation(
@@ -289,7 +309,7 @@ export class SynthEngine {
   nodes: Map<string, SynthNode> = new Map();
   ctx: AudioContext;
   connections: Connections = new Connections();
-  modulations: Modulations = new Modulations();
+  modulations: Modulations = new Modulations(this);
   notes: Map<number, boolean> = new Map();
   private observers: Map<string, Set<EventCallback>> = new Map();
 

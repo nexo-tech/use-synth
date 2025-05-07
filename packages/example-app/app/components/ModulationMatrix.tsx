@@ -33,6 +33,15 @@ export default function ModulationMatrix({
     });
 
     if (lastTouchedParam) {
+      for (const mod of activeModulations) {
+        if (
+          mod.toID === lastTouchedParam.id &&
+          mod.parameter === lastTouchedParam.parameter
+        ) {
+          return res;
+        }
+      }
+
       res.push({
         id: lastTouchedParam.id,
         parameter: lastTouchedParam.parameter,
@@ -124,12 +133,14 @@ export default function ModulationMatrix({
                             size="sm"
                             value={amount}
                             onChange={(value) =>
-                              // handleModulationChange(
-                              //   source.id,
-                              //   target.id,
-                              //   value
-                              // )
-                              {}
+                              onModulationChange(
+                                new ModulationEvent(
+                                  source.id,
+                                  target.id,
+                                  target.parameter,
+                                  value
+                                )
+                              )
                             }
                             min={-1}
                             max={1}

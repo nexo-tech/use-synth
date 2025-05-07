@@ -16,6 +16,9 @@ export function useEngine() {
     engine.current.observe("ParameterUpdatedEvent", (e) => {
       bumpUI((prev) => prev + 1);
     });
+    engine.current.observe("ModulationUpdatedEvent", (e) => {
+      bumpUI((prev) => prev + 1);
+    });
 
     engine.current.sendEvent(
       new NodeCreateEvent("osc1", "oscillator", {
