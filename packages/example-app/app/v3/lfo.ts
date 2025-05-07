@@ -52,6 +52,7 @@ class NoteLFO {
     if (this.isPlaying) return;
     this.isPlaying = true;
     this.oscillator.start();
+    console.log("noteOn", this.oscillator.frequency.value);
   }
 
   noteOff() {
@@ -88,6 +89,12 @@ export class SynthLFO extends SynthNode {
     this.config = config;
   }
 
+  prepareNotes(notes: number[]) {
+    notes.forEach((note) => {
+      this.getNoteLFO(note);
+    });
+  }
+
   getNodeOutput(): NodeOutput {
     // We don't return a single node since each note has its own LFO
     return new Map(
@@ -109,7 +116,11 @@ export class SynthLFO extends SynthNode {
   }
 
   getReleaseValue(): number {
-    return 0; // LFO doesn't have a release value
+    const modulations = this.engine.modulations.getModulationsFrom(this.id);
+    return modulations.reduce((acc, conn) => {
+      const node = this.engine.nodes.get(conn.toID);
+      return Math.max(acc, node?.getReleaseValue() ?? 0);
+    }, 0);
   }
 
   observe(event: SynthEvent): void {
@@ -188,7 +199,15 @@ export class SynthLFO extends SynthNode {
         const ev = event as NoteStopEvent;
         const lfo = this.noteLFOs.get(ev.note);
         if (lfo) {
-          lfo.noteOff();
+          const releaseValue = this.getReleaseValue();
+          console.log({ releaseValue });
+          if (releaseValue > 0) {
+            setTimeout(() => {
+              lfo.noteOff();
+            }, releaseValue * 1000);
+          } else {
+            lfo.noteOff();
+          }
           this.noteLFOs.delete(ev.note);
         }
         break;

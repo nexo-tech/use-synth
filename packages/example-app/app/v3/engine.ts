@@ -6,6 +6,7 @@ import {
   DisconnectionEvent,
   disconnectNodeOutput,
   getReleaseValue,
+  ModulationEvent,
   NodeCreateEvent,
   NodeDeleteEvent,
   NodeOutput,
@@ -114,15 +115,6 @@ interface Modulation {
   toID: string;
   parameter: string;
   amount: number; // -1 to 1
-}
-
-export class ModulationEvent implements SynthEvent {
-  constructor(
-    public readonly fromID: string,
-    public readonly toID: string,
-    public readonly parameter: string,
-    public readonly amount: number
-  ) {}
 }
 
 class Modulations {

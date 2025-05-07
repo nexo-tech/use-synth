@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { ModulationEvent, SynthEngine } from "../engine";
-import { Connection, ConnectionEvent, NodeCreateEvent } from "../base";
+import { SynthEngine } from "../engine";
+import {
+  Connection,
+  ConnectionEvent,
+  ModulationEvent,
+  NodeCreateEvent,
+} from "../base";
 
 export function useEngine() {
   const engine = useRef<SynthEngine | null>(null);
@@ -51,7 +56,7 @@ export function useEngine() {
       })
     );
 
-    engine.current.sendEvent(new ModulationEvent("lfo1", "osc1", "level", 0.5));
+    engine.current.sendEvent(new ModulationEvent("lfo1", "osc1", "level", 1));
 
     engine.current.sendEvent(
       new ConnectionEvent(new Connection("adsr1", "osc1"))

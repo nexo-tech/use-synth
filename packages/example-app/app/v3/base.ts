@@ -168,3 +168,12 @@ export class ParameterUpdatedEvent<T> implements SynthEvent {
     public readonly oldValue: T
   ) {}
 }
+
+export class ModulationEvent implements SynthEvent {
+  constructor(
+    public readonly fromID: string,
+    public readonly toID: string,
+    public readonly parameter: string,
+    public readonly amount: number
+  ) {}
+}

@@ -8,6 +8,8 @@ import { EnvelopeConfig } from "../page";
 import { ParameterChangeEvent } from "./base";
 import { useEngine } from "./hooks/use-engine";
 import { useKeyboardNotes } from "./hooks/use-keyboard-notes";
+import Oscilloscope from "../components/Oscilloscope";
+import { useEffect, useState } from "react";
 
 export default function OscillatorPage() {
   const engine = useEngine();
@@ -25,7 +27,25 @@ export default function OscillatorPage() {
   const lfos = engine.current
     ?.getLFOs()
     .map((x) => [x.id, x.getConfig()] as const);
-
+  const lfo = (() => {
+    try {
+      // @ts-ignore
+      if (window.modg) {
+        // @ts-ignore
+        return window.modg;
+      }
+      const x = engine.current?.getLFOs()?.[0]?.getNodeOutput();
+      console.log({ x });
+      if (x instanceof Map) {
+        return Array.from(x.values())[0];
+      } else if (x instanceof AudioNode) {
+        return x;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  })();
   return (
     <main className="flex min-h-screen flex-col items-center p-8 bg-gray-950 text-white">
       <div className="flex flex-col gap-2">
@@ -89,6 +109,7 @@ export default function OscillatorPage() {
             />
           </div>
         ))}
+        {lfo && <Oscilloscope audioNode={lfo} width={400} height={200} />}
 
         <div className="mb-4">
           <p>Current octave: {octave}</p>

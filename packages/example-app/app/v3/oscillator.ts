@@ -10,8 +10,10 @@ import {
   ParameterUpdatedEvent,
   NodeOutput,
   connectNodeOutputs,
+  ModulationEvent,
 } from "./base";
 import { SynthADSR } from "./adsr";
+import { SynthLFO } from "./lfo";
 
 export interface OscillatorConfig {
   type: "sine" | "square" | "sawtooth" | "triangle";
@@ -36,7 +38,9 @@ class OscillatorVoice {
 class OscillatorNote {
   private voices: OscillatorVoice[] = [];
   private levelGain: GainNode;
+  private levelModulatedGain: GainNode;
   private adsrGain: GainNode;
+  private levelModulationGainInput: GainNode;
 
   getNote(): number {
     return this.note;
@@ -53,8 +57,19 @@ class OscillatorNote {
     private inputADSR: SynthADSR | null
   ) {
     this.levelGain = engine.ctx.createGain();
+    this.levelModulatedGain = engine.ctx.createGain();
     this.adsrGain = engine.ctx.createGain();
+    this.levelModulationGainInput = engine.ctx.createGain();
+
+    // Set initial values
+    this.levelGain.gain.value = this.config.level ?? 1.0;
+    this.levelModulationGainInput.gain.value = 0;
+    this.levelModulatedGain.gain.value = 1;
+    this.levelModulatedGain.connect(this.levelGain);
+
+    // Connect the modulation chain
     this.levelGain.connect(this.adsrGain);
+
     this.createVoices();
   }
 
@@ -89,15 +104,12 @@ class OscillatorNote {
       delay.connect(panner);
       panner.pan.value = pan;
       panner.connect(gain);
-      gain.connect(this.levelGain);
+      gain.connect(this.levelModulatedGain);
 
       this.voices.push(
         new OscillatorVoice(osc, panner, gain, delay, voicePhase)
       );
     }
-
-    // Set level
-    this.levelGain.gain.value = this.config.level ?? 1.0;
 
     // Connect ADSR if available
     if (this.inputADSR) {
@@ -112,9 +124,12 @@ class OscillatorNote {
   }
 
   stop(immediate: boolean = false) {
+    let releaseTime = 0;
+    if (this.inputADSR && !immediate) {
+      releaseTime = this.inputADSR.getConfig().release * 1000;
+    }
     this.voices.forEach((voice) => {
-      if (this.inputADSR && !immediate) {
-        const releaseTime = this.inputADSR.getConfig().release * 1000;
+      if (releaseTime > 0) {
         setTimeout(() => {
           voice.osc.stop();
           voice.osc.disconnect();
@@ -124,11 +139,19 @@ class OscillatorNote {
         voice.osc.disconnect();
       }
     });
+    if (releaseTime > 0) {
+      setTimeout(() => {
+        this.disconnectModulation();
+      }, releaseTime);
+    } else {
+      this.disconnectModulation();
+    }
   }
 
   disconnect() {
     this.voices.forEach((voice) => voice.osc.disconnect());
     this.levelGain.disconnect();
+    this.levelModulatedGain.disconnect();
     this.adsrGain.disconnect();
   }
 
@@ -181,11 +204,39 @@ class OscillatorNote {
       voice.osc.type = type;
     });
   }
+
+  connectModulation(
+    parameter: "level" | "pitch" | "detune",
+    modulationSource: AudioNode,
+    amount: number
+  ) {
+    switch (parameter) {
+      case "level":
+        modulationSource.connect(this.levelModulationGainInput);
+        this.levelModulationGainInput.gain.value = amount;
+        this.levelModulationGainInput.connect(this.levelModulatedGain.gain);
+        break;
+      default:
+        throw new Error(`Unsupported parameter: ${parameter}`);
+    }
+  }
+
+  disconnectModulation() {
+    this.levelModulationGainInput.disconnect();
+  }
 }
 
 export class SynthOscillator extends SynthNode {
   private notes: Map<number, OscillatorNote> = new Map();
   private inputADSR: SynthADSR | null = null;
+  private modulationSources: Map<
+    string,
+    {
+      parameter: "level" | "pitch" | "detune";
+      source: SynthNode;
+      amount: number;
+    }
+  > = new Map();
 
   prepareNotes(notes: number[]): void {
     notes.forEach((note) => {
@@ -436,11 +487,56 @@ export class SynthOscillator extends SynthNode {
         }
         break;
       }
+      case "ModulationEvent": {
+        const ev = event as ModulationEvent;
+        if (ev.toID !== this.id) return;
+
+        const modulationSource = this.engine.nodes.get(ev.fromID);
+        if (!(modulationSource instanceof SynthLFO)) return;
+
+        // Store the modulation source
+        this.modulationSources.set(ev.fromID, {
+          parameter: ev.parameter as "level" | "pitch" | "detune",
+          source: modulationSource,
+          amount: ev.amount,
+        });
+
+        // Get the LFO output for this note
+        const lfoOutput = modulationSource.getNodeOutput();
+        if (lfoOutput instanceof Map) {
+          // Apply modulation to all active notes
+          this.notes.forEach((note, noteNumber) => {
+            const lfoSignal = lfoOutput.get(noteNumber);
+            if (lfoSignal) {
+              note.connectModulation(
+                ev.parameter as "level" | "pitch" | "detune",
+                lfoSignal,
+                ev.amount
+              );
+            }
+          });
+        }
+        break;
+      }
       case "NoteStartEvent": {
         const ev = event as NoteStartEvent;
         const note = this.getNote(ev.note);
         note.start();
         this.connectNoteToOutput(note);
+
+        // Connect any active modulations to the new note
+        this.modulationSources.forEach(
+          ({ parameter, source, amount }, lfoId) => {
+            source.prepareNotes([ev.note]);
+            const nodeOutput = source.getNodeOutput();
+            if (nodeOutput instanceof Map) {
+              const nodeSignal = nodeOutput.get(ev.note);
+              if (nodeSignal) {
+                note.connectModulation(parameter, nodeSignal, amount);
+              }
+            }
+          }
+        );
         break;
       }
       case "NoteStopEvent": {
