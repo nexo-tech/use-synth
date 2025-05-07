@@ -220,10 +220,17 @@ class OscillatorNote {
         this.levelModulationGainInput.connect(this.levelModulatedGain.gain);
         break;
       case "pitch":
+        console.log(
+          "Connecting pitch modulation to note",
+          this.note,
+          amount,
+          this.voices
+        );
         modulationSource.connect(this.pitchModulationGainInput);
-        this.pitchModulationGainInput.gain.value = amount;
+        this.pitchModulationGainInput.gain.value = amount * 24000;
         // Connect to each voice's frequency parameter
         this.voices.forEach((voice) => {
+          console.log(voice.osc.frequency);
           this.pitchModulationGainInput.connect(voice.osc.frequency);
         });
         break;
@@ -508,14 +515,6 @@ export class SynthOscillator extends SynthNode {
 
         const modulationSource = this.engine.nodes.get(ev.fromID);
         if (!(modulationSource instanceof SynthLFO)) return;
-
-        // Store the modulation source
-        // this.modulationSources.set(ev.fromID, {
-        //   parameter: ev.parameter as "level" | "pitch" | "detune",
-        //   source: modulationSource,
-        //   amount: ev.amount,
-        // });
-
         // Get the LFO output for this note
         const modulationNodeOutput = modulationSource.getNodeOutput();
         if (modulationNodeOutput instanceof Map) {
@@ -548,12 +547,6 @@ export class SynthOscillator extends SynthNode {
             if (nodeOutput instanceof Map) {
               const nodeSignal = nodeOutput.get(ev.note);
               if (nodeSignal) {
-                console.log(
-                  "[OscInstance] Connecting modulation to note",
-                  ev.note,
-                  parameter,
-                  amount
-                );
                 note.connectModulation(parameter, nodeSignal, amount);
               }
             }
