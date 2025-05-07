@@ -109,7 +109,7 @@ export default function ModulationMatrix({
 
               return (
                 <tr
-                  key={target.id}
+                  key={target.id + target.parameter}
                   className={`border-t border-gray-700 ${
                     isLastTouched ? "bg-gray-700/30" : ""
                   }`}
@@ -127,7 +127,10 @@ export default function ModulationMatrix({
                     const amount = modulation?.amount ?? 0;
 
                     return (
-                      <td key={`${target.id}-${source.id}`} className="p-1">
+                      <td
+                        key={`${target.id + target.parameter}-${source.id}`}
+                        className="p-1"
+                      >
                         <div className="flex justify-center">
                           <Knob
                             size="sm"

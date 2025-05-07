@@ -41,6 +41,7 @@ class OscillatorNote {
   private levelModulatedGain: GainNode;
   private adsrGain: GainNode;
   private levelModulationGainInput: GainNode;
+  private pitchModulationGainInput: GainNode;
 
   getNote(): number {
     return this.note;
@@ -60,10 +61,12 @@ class OscillatorNote {
     this.levelModulatedGain = engine.ctx.createGain();
     this.adsrGain = engine.ctx.createGain();
     this.levelModulationGainInput = engine.ctx.createGain();
+    this.pitchModulationGainInput = engine.ctx.createGain();
 
     // Set initial values
     this.levelGain.gain.value = this.config.level ?? 1.0;
     this.levelModulationGainInput.gain.value = 0;
+    this.pitchModulationGainInput.gain.value = 0;
     this.levelModulatedGain.gain.value = 1;
     this.levelModulatedGain.connect(this.levelGain);
 
@@ -216,6 +219,14 @@ class OscillatorNote {
         this.levelModulationGainInput.gain.value = amount;
         this.levelModulationGainInput.connect(this.levelModulatedGain.gain);
         break;
+      case "pitch":
+        modulationSource.connect(this.pitchModulationGainInput);
+        this.pitchModulationGainInput.gain.value = amount;
+        // Connect to each voice's frequency parameter
+        this.voices.forEach((voice) => {
+          this.pitchModulationGainInput.connect(voice.osc.frequency);
+        });
+        break;
       default:
         throw new Error(`Unsupported parameter: ${parameter}`);
     }
@@ -223,20 +234,13 @@ class OscillatorNote {
 
   disconnectModulation() {
     this.levelModulationGainInput.disconnect();
+    this.pitchModulationGainInput.disconnect();
   }
 }
 
 export class SynthOscillator extends SynthNode {
   private notes: Map<number, OscillatorNote> = new Map();
   private inputADSR: SynthADSR | null = null;
-  private modulationSources: Map<
-    string,
-    {
-      parameter: "level" | "pitch" | "detune";
-      source: SynthNode;
-      amount: number;
-    }
-  > = new Map();
 
   prepareNotes(notes: number[]): void {
     notes.forEach((note) => {
@@ -297,6 +301,17 @@ export class SynthOscillator extends SynthNode {
     return oscNote;
   }
 
+  get modulationSources(): {
+    parameter: "level" | "pitch" | "detune";
+    source: SynthNode;
+    amount: number;
+  }[] {
+    return this.engine.modulations.getModulationsTo(this.id).map((mod) => ({
+      parameter: mod.parameter as "level" | "pitch" | "detune",
+      source: this.engine.nodes.get(mod.fromID) as SynthNode,
+      amount: mod.amount,
+    }));
+  }
   observe(event: SynthEvent): void {
     switch (event.constructor.name) {
       case "ParameterChangeEvent": {
@@ -495,11 +510,11 @@ export class SynthOscillator extends SynthNode {
         if (!(modulationSource instanceof SynthLFO)) return;
 
         // Store the modulation source
-        this.modulationSources.set(ev.fromID, {
-          parameter: ev.parameter as "level" | "pitch" | "detune",
-          source: modulationSource,
-          amount: ev.amount,
-        });
+        // this.modulationSources.set(ev.fromID, {
+        //   parameter: ev.parameter as "level" | "pitch" | "detune",
+        //   source: modulationSource,
+        //   amount: ev.amount,
+        // });
 
         // Get the LFO output for this note
         const modulationNodeOutput = modulationSource.getNodeOutput();
@@ -527,11 +542,18 @@ export class SynthOscillator extends SynthNode {
         // Connect any active modulations to the new note
         this.modulationSources.forEach(
           ({ parameter, source, amount }, lfoId) => {
+            console.log(parameter, source, amount);
             source.prepareNotes([ev.note]);
             const nodeOutput = source.getNodeOutput();
             if (nodeOutput instanceof Map) {
               const nodeSignal = nodeOutput.get(ev.note);
               if (nodeSignal) {
+                console.log(
+                  "[OscInstance] Connecting modulation to note",
+                  ev.note,
+                  parameter,
+                  amount
+                );
                 note.connectModulation(parameter, nodeSignal, amount);
               }
             }

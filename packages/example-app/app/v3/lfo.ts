@@ -52,7 +52,6 @@ class NoteLFO {
     if (this.isPlaying) return;
     this.isPlaying = true;
     this.oscillator.start();
-    console.log("noteOn", this.oscillator.frequency.value);
   }
 
   noteOff() {
@@ -200,7 +199,6 @@ export class SynthLFO extends SynthNode {
         const lfo = this.noteLFOs.get(ev.note);
         if (lfo) {
           const releaseValue = this.getReleaseValue();
-          console.log({ releaseValue });
           if (releaseValue > 0) {
             setTimeout(() => {
               lfo.noteOff();

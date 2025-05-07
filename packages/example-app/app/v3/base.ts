@@ -14,6 +14,11 @@ export const availableModulationTargets = [
     parameter: "level",
     name: "Level",
   },
+  {
+    componentType: "osc",
+    parameter: "pitch",
+    name: "Pitch",
+  },
 ];
 
 export function connectNodeOutputs(fromNode: SynthNode, toNode: SynthNode) {
