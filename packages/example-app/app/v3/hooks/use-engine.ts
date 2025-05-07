@@ -50,8 +50,8 @@ export function useEngine() {
     // Create a lfo
     engine.current.sendEvent(
       new NodeCreateEvent("lfo1", "lfo", {
-        type: "sine",
-        rate: 1,
+        type: "square",
+        rate: 5,
         shape: 0.5,
         phase: 0,
         delay: 0,
@@ -59,7 +59,7 @@ export function useEngine() {
       })
     );
 
-    engine.current.sendEvent(new ModulationEvent("lfo1", "osc1", "level", 1));
+    engine.current.sendEvent(new ModulationEvent("lfo1", "osc1", "pitch", 1));
 
     engine.current.sendEvent(
       new ConnectionEvent(new Connection("adsr1", "osc1"))

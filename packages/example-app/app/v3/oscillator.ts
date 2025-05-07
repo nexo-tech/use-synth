@@ -220,18 +220,10 @@ class OscillatorNote {
         this.levelModulationGainInput.connect(this.levelModulatedGain.gain);
         break;
       case "pitch":
-        console.log(
-          "Connecting pitch modulation to note",
-          this.note,
-          amount,
-          this.voices
-        );
         modulationSource.connect(this.pitchModulationGainInput);
-        this.pitchModulationGainInput.gain.value = amount * 24000;
-        // Connect to each voice's frequency parameter
+        this.pitchModulationGainInput.gain.value = amount * 2850; // cents
         this.voices.forEach((voice) => {
-          console.log(voice.osc.frequency);
-          this.pitchModulationGainInput.connect(voice.osc.frequency);
+          this.pitchModulationGainInput.connect(voice.osc.detune);
         });
         break;
       default:
