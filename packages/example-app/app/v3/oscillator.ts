@@ -502,15 +502,15 @@ export class SynthOscillator extends SynthNode {
         });
 
         // Get the LFO output for this note
-        const lfoOutput = modulationSource.getNodeOutput();
-        if (lfoOutput instanceof Map) {
+        const modulationNodeOutput = modulationSource.getNodeOutput();
+        if (modulationNodeOutput instanceof Map) {
           // Apply modulation to all active notes
           this.notes.forEach((note, noteNumber) => {
-            const lfoSignal = lfoOutput.get(noteNumber);
-            if (lfoSignal) {
+            const modulationSignal = modulationNodeOutput.get(noteNumber);
+            if (modulationSignal) {
               note.connectModulation(
                 ev.parameter as "level" | "pitch" | "detune",
-                lfoSignal,
+                modulationSignal,
                 ev.amount
               );
             }
